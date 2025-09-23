@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { IManagedObject } from '@c8y/client';
+import { IManagedObject } from "@c8y/client";
 
 export interface WidgetConfiguration {
   mapConfigurationId: string;
@@ -28,13 +28,17 @@ export interface WidgetConfiguration {
     thresholds?: Threshold[];
   };
   datapointsPopup?: DatapointPopup[];
+  coordinates?: GPSCoordinates;
 }
 
 export type Threshold = {
   id: string;
   label: string;
   color: string;
-} & ({ type: 'measurement'; min: number; max: number } | { type: 'event'; text: string; eventType?: string });
+} & (
+  | { type: "measurement"; min: number; max: number }
+  | { type: "event"; text: string; eventType?: string }
+);
 
 export interface DatapointPopup {
   measurement: Datapoint;
@@ -55,15 +59,31 @@ export interface Measurement {
 export interface MapConfiguration {
   id?: string;
   name: string;
-  coordinates: Array<{ lat: number; lng: number }>;
+  coordinates: GPSCoordinates;
   location: string;
   assetType: string;
   levels: MapConfigurationLevel[];
-  type: 'c8y_Building';
+  type: "c8y_Building";
+}
+
+export interface GPSCoordinates {
+  topLeftLat?: number;
+  topLeftLng?: number;
+  bottomRightLat?: number;
+  bottomRightLng?: number;
+  anchorLat?: number;
+  anchorLng?: number;
+  width?: number;
+  height?: number;
+  scaleX?: number;
+  scaleY?: number;
+  offsetX?: number;
+  offsetY?: number;
+  placementMode?: string;
 }
 
 export function isMapConfigutaration(obj: any): obj is MapConfiguration {
-  return obj.levels && obj.type === 'c8y_Building';
+  return obj.levels && obj.type === "c8y_Building";
 }
 
 export interface MapConfigurationLevel {

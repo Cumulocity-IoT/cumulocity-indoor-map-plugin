@@ -22,6 +22,7 @@ import { AssignLocationsStepComponent } from "./config/map-config-modal/assign-l
 import { ImageUploadComponent } from "./shared/components/image-upload/image-upload.component";
 import { MoveMarkerMapComponent } from "./shared/components/move-marker-map/move-marker-map.component";
 import { DeviceSelectorModalComponent } from "./shared/components/device-selector-modal/device-selector-modal.component";
+import { GPSComponent } from "./config/select-co-ordinates/gps.component";
 
 @NgModule({
   declarations: [
@@ -32,6 +33,7 @@ import { DeviceSelectorModalComponent } from "./shared/components/device-selecto
     MapConfigurationModalComponent,
     AssignDevicesStepComponent,
     AssignLocationsStepComponent,
+    GPSComponent,
   ],
   imports: [
     CoreModule,

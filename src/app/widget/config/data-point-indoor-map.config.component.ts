@@ -15,22 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { Component, Input, OnInit } from '@angular/core';
-import { BsModalService } from 'ngx-bootstrap/modal';
-import { AlertService, OnBeforeSave } from '@c8y/ngx-components';
-import { DataPointIndoorMapConfigService } from '../data-point-indoor-map.config.service';
-import { AddThresholdModalComponent } from './add-threshold-modal/add-threshold-modal.component';
-import { DatapointPopup, MapConfiguration, Threshold, WidgetConfiguration } from '../data-point-indoor-map.model';
-import { ManagedDatapointsPopupModalComponent } from './managed-datapoints-popup-modal/managed-datapoints-popup-modal.component';
-import { isNil } from 'lodash';
-import { MapConfigurationModalComponent } from './map-config-modal/map-config-modal.component';
-import { Observable } from 'rxjs';
-import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { Component, Input, OnInit } from "@angular/core";
+import { BsModalService } from "ngx-bootstrap/modal";
+import { AlertService, OnBeforeSave } from "@c8y/ngx-components";
+import { DataPointIndoorMapConfigService } from "../data-point-indoor-map.config.service";
+import { AddThresholdModalComponent } from "./add-threshold-modal/add-threshold-modal.component";
+import {
+  DatapointPopup,
+  MapConfiguration,
+  Threshold,
+  WidgetConfiguration,
+} from "../data-point-indoor-map.model";
+import { ManagedDatapointsPopupModalComponent } from "./managed-datapoints-popup-modal/managed-datapoints-popup-modal.component";
+import { isNil } from "lodash";
+import { MapConfigurationModalComponent } from "./map-config-modal/map-config-modal.component";
+import { Observable } from "rxjs";
+import { CdkDragDrop, moveItemInArray } from "@angular/cdk/drag-drop";
 
 @Component({
-  selector: 'data-point-indoor-map-configuration',
-  templateUrl: './data-point-indoor-map.config.component.html',
-  styleUrls: ['./data-point-indoor-map.config.component.less'],
+  selector: "data-point-indoor-map-configuration",
+  templateUrl: "./data-point-indoor-map.config.component.html",
+  styleUrls: ["./data-point-indoor-map.config.component.less"],
   providers: [DataPointIndoorMapConfigService],
 })
 export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
@@ -45,10 +50,22 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   selectedMapConfiguration?: MapConfiguration;
   selectedMapConfigurationId?: string;
 
-  selectedDataPoint: string | undefined = '';
+  selectedDataPoint: string | undefined = "";
+  isSaving = false;
+  isSaved = false;
+  constructor(
+    private configService: DataPointIndoorMapConfigService,
+    private alertService: AlertService,
+    private modalService: BsModalService
+  ) {}
 
-  constructor(private configService: DataPointIndoorMapConfigService, private alertService: AlertService, private modalService: BsModalService) {}
-
+  indoorMapConfig = {
+    placementMode: "corners",
+    topLeftLat: 52.52,
+    topLeftLng: 13.4,
+    bottomRightLat: 52.51,
+    bottomRightLng: 13.41,
+  };
   ngOnInit() {
     this.initConfiguration();
     this.initMapConfigurations();
@@ -57,7 +74,9 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onCreateNewMapConfiguration(): void {
-    const a = this.modalService.show(MapConfigurationModalComponent, { class: 'modal-lg' });
+    const a = this.modalService.show(MapConfigurationModalComponent, {
+      class: "modal-lg",
+    });
     a.content?.onSave$.subscribe((mapConfiguration) => {
       this.mapConfigurations.push(mapConfiguration);
       this.selectedMapConfigurationId = mapConfiguration.id;
@@ -67,7 +86,10 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   onEditMapConfiguration(): void {
     const initialState = { building: this.selectedMapConfiguration };
-    const modal = this.modalService.show(MapConfigurationModalComponent, { initialState, class: 'modal-lg' });
+    const modal = this.modalService.show(MapConfigurationModalComponent, {
+      initialState,
+      class: "modal-lg",
+    });
     modal.content?.onSave$.subscribe((mapConfiguration) => {
       this.selectedMapConfiguration = mapConfiguration;
       this.onMapConfigurationChanged();
@@ -75,22 +97,34 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onDrop(event: CdkDragDrop<Threshold[]>) {
-    moveItemInArray(event.container.data, event.previousIndex, event.currentIndex);
+    moveItemInArray(
+      event.container.data,
+      event.previousIndex,
+      event.currentIndex
+    );
   }
 
   onDeleteMapConfiguration(): void {
-    this.configService.deleteMapConfiguration(this.selectedMapConfigurationId!).then((success) => {
-      if (success) {
-        this.mapConfigurations = this.mapConfigurations.filter((mapConfiguration) => mapConfiguration.id !== this.selectedMapConfigurationId);
-        this.selectedMapConfigurationId = undefined;
-        this.selectedMapConfiguration = undefined;
-        this.updateDataPointSeries();
-      }
-    });
+    this.configService
+      .deleteMapConfiguration(this.selectedMapConfigurationId!)
+      .then((success) => {
+        if (success) {
+          this.mapConfigurations = this.mapConfigurations.filter(
+            (mapConfiguration) =>
+              mapConfiguration.id !== this.selectedMapConfigurationId
+          );
+          this.selectedMapConfigurationId = undefined;
+          this.selectedMapConfiguration = undefined;
+          this.updateDataPointSeries();
+        }
+      });
   }
 
   onMapConfigurationChanged(): void {
-    const selectedMapConfiguration = this.mapConfigurations.find((mapConfiguration) => mapConfiguration.id === this.selectedMapConfigurationId);
+    const selectedMapConfiguration = this.mapConfigurations.find(
+      (mapConfiguration) =>
+        mapConfiguration.id === this.selectedMapConfigurationId
+    );
     if (this.selectedMapConfigurationId && selectedMapConfiguration) {
       this.selectedMapConfiguration = selectedMapConfiguration;
       this.config.mapConfigurationId = this.selectedMapConfigurationId;
@@ -99,8 +133,11 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onPrimaryMeasurementChanged(): void {
-    const measurement: string[] = this.selectedDataPoint!.split('.');
-    this.config.measurement = { fragment: measurement[0], series: measurement[1] };
+    const measurement: string[] = this.selectedDataPoint!.split(".");
+    this.config.measurement = {
+      fragment: measurement[0],
+      series: measurement[1],
+    };
   }
 
   onThresholdClicked(threshold: Threshold) {
@@ -116,21 +153,26 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   private initConfiguration(): void {
-    if (!!this.config && this.config.mapConfigurationId && this.config.measurement) {
+    if (
+      !!this.config &&
+      this.config.mapConfigurationId &&
+      this.config.measurement
+    ) {
       return;
     }
 
     this.config = Object.assign(this.config, {
-      mapConfigurationId: '',
+      mapConfigurationId: "",
       measurement: {
-        fragment: '',
-        series: '',
+        fragment: "",
+        series: "",
       },
       mapSettings: {
         zoomLevel: this.DEFAULT_ZOOM_LEVEL,
       },
+      coordinates: {},
       legend: {
-        title: '',
+        title: "",
         thresholds: [],
       },
       datapointsPopup: [],
@@ -138,35 +180,44 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   private initMapConfigurations(): void {
-    this.configService.loadSmartMapConfigurations().then((mapConfigurations) => {
-      this.mapConfigurations = mapConfigurations;
+    this.configService
+      .loadSmartMapConfigurations()
+      .then((mapConfigurations) => {
+        this.mapConfigurations = mapConfigurations;
 
-      if (!this.config || !this.config.mapConfigurationId) {
-        return;
-      }
+        if (!this.config || !this.config.mapConfigurationId) {
+          return;
+        }
 
-      this.selectedMapConfiguration = this.mapConfigurations.find((mapConfiguration) => mapConfiguration.id === this.config.mapConfigurationId);
-      this.selectedMapConfigurationId = this.selectedMapConfiguration?.id;
-      this.onMapConfigurationChanged();
-    });
+        this.selectedMapConfiguration = this.mapConfigurations.find(
+          (mapConfiguration) =>
+            mapConfiguration.id === this.config.mapConfigurationId
+        );
+        this.selectedMapConfigurationId = this.selectedMapConfiguration?.id;
+        this.onMapConfigurationChanged();
+      });
   }
 
   private updateDataPointSeries(): void {
-    this.configService.getSupportedSeriesFromMapConfiguration(this.selectedMapConfiguration!).then((datapoints) => {
-      this.dataPointSeries = datapoints;
-      if (!this.config || !this.config.measurement) {
-        return;
-      }
+    this.configService
+      .getSupportedSeriesFromMapConfiguration(this.selectedMapConfiguration!)
+      .then((datapoints) => {
+        this.dataPointSeries = datapoints;
+        if (!this.config || !this.config.measurement) {
+          return;
+        }
 
-      const measurementStructure = `${this.config.measurement.fragment}.${this.config.measurement.series}`;
-      this.selectedDataPoint = this.dataPointSeries.find((dataPoint) => dataPoint === measurementStructure);
+        const measurementStructure = `${this.config.measurement.fragment}.${this.config.measurement.series}`;
+        this.selectedDataPoint = this.dataPointSeries.find(
+          (dataPoint) => dataPoint === measurementStructure
+        );
 
-      if (!this.selectedDataPoint) {
-        return;
-      }
+        if (!this.selectedDataPoint) {
+          return;
+        }
 
-      this.onPrimaryMeasurementChanged();
-    });
+        this.onPrimaryMeasurementChanged();
+      });
   }
 
   private initThresholds(): void {
@@ -174,7 +225,9 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       return;
     }
 
-    this.config.legend.thresholds.forEach((threshold) => this.addThresholdToList(threshold));
+    this.config.legend.thresholds.forEach((threshold) =>
+      this.addThresholdToList(threshold)
+    );
   }
 
   private initPopupMarker(): void {
@@ -221,31 +274,52 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
         : {}),
     };
 
-    const modalRef = this.modalService.show(ManagedDatapointsPopupModalComponent, config);
+    const modalRef = this.modalService.show(
+      ManagedDatapointsPopupModalComponent,
+      config
+    );
     modalRef.content?.onSave$.subscribe((datapointsPopup: DatapointPopup[]) => {
       this.config.datapointsPopup = datapointsPopup;
     });
   }
 
   private addThresholdToList(threshold: Threshold): void {
-    let indexExistingThreshold = this.config?.legend?.thresholds?.findIndex((existingThreshold) => existingThreshold.id === threshold.id);
+    let indexExistingThreshold = this.config?.legend?.thresholds?.findIndex(
+      (existingThreshold) => existingThreshold.id === threshold.id
+    );
     if (indexExistingThreshold !== -1 && !isNil(indexExistingThreshold)) {
-      this.config!.legend!.thresholds![indexExistingThreshold] = { ...threshold };
+      this.config!.legend!.thresholds![indexExistingThreshold] = {
+        ...threshold,
+      };
     } else {
       this.config?.legend?.thresholds?.push(threshold);
     }
   }
 
   private removeThresholdFromList(threshold: Threshold): void {
-    let indexExistingThresholdToDelete = this.config?.legend?.thresholds?.findIndex((existingThreshold) => existingThreshold.id === threshold.id);
-    if (indexExistingThresholdToDelete === -1 || isNil(indexExistingThresholdToDelete)) {
+    let indexExistingThresholdToDelete =
+      this.config?.legend?.thresholds?.findIndex(
+        (existingThreshold) => existingThreshold.id === threshold.id
+      );
+    if (
+      indexExistingThresholdToDelete === -1 ||
+      isNil(indexExistingThresholdToDelete)
+    ) {
       return;
     }
 
     this.config?.legend?.thresholds?.splice(indexExistingThresholdToDelete, 1);
   }
 
-  onBeforeSave(config?: WidgetConfiguration): boolean | Promise<boolean> | Observable<boolean> {
+  onGpsConfigChange(newConfig: any): void {
+    console.log("Parent received new config:", newConfig);
+    this.config.coordinates = newConfig;
+    this.isSaved = false; // Mark as unsaved since data has changed
+  }
+
+  onBeforeSave(
+    config?: WidgetConfiguration
+  ): boolean | Promise<boolean> | Observable<boolean> {
     if (!config?.mapConfigurationId) {
       return false;
     }

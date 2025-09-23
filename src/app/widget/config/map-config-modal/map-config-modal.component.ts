@@ -1,14 +1,24 @@
-import { IManagedObject, InventoryService, IResult } from '@c8y/client';
-import { BsModalRef } from 'ngx-bootstrap/modal';
-import { MapConfiguration, MapConfigurationLevel } from '../../data-point-indoor-map.model';
-import { AfterViewInit, Component, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { C8yStepper } from '@c8y/ngx-components';
-import { Subject, takeUntil, throttleTime } from 'rxjs';
-import { CdkStep, STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
+import { IManagedObject, InventoryService, IResult } from "@c8y/client";
+import { BsModalRef } from "ngx-bootstrap/modal";
+import {
+  MapConfiguration,
+  MapConfigurationLevel,
+} from "../../data-point-indoor-map.model";
+import {
+  AfterViewInit,
+  Component,
+  Input,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+} from "@angular/core";
+import { C8yStepper } from "@c8y/ngx-components";
+import { Subject, takeUntil, throttleTime } from "rxjs";
+import { CdkStep, STEPPER_GLOBAL_OPTIONS } from "@angular/cdk/stepper";
 
 @Component({
-  templateUrl: './map-config-modal.component.html',
-  styleUrls: ['./map-config-modal.component.less'],
+  templateUrl: "./map-config-modal.component.html",
+  styleUrls: ["./map-config-modal.component.less"],
   providers: [
     {
       provide: STEPPER_GLOBAL_OPTIONS,
@@ -16,7 +26,9 @@ import { CdkStep, STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
     },
   ],
 })
-export class MapConfigurationModalComponent implements OnInit, AfterViewInit, OnDestroy {
+export class MapConfigurationModalComponent
+  implements OnInit, AfterViewInit, OnDestroy
+{
   DEFAULT_LEVELS: MapConfigurationLevel[] = [
     {
       name: `Ground Floor`,
@@ -40,7 +52,10 @@ export class MapConfigurationModalComponent implements OnInit, AfterViewInit, On
   isPending = false;
   isLoading = false;
 
-  constructor(private bsModalRef: BsModalRef, private inventory: InventoryService) {}
+  constructor(
+    private bsModalRef: BsModalRef,
+    private inventory: InventoryService
+  ) {}
 
   STEPS = {
     NAME_STEP: 0,
@@ -49,11 +64,12 @@ export class MapConfigurationModalComponent implements OnInit, AfterViewInit, On
   } as const;
 
   @Input() building: MapConfiguration = {
-    type: 'c8y_Building',
-    name: 'My new building',
-    coordinates: new Array<{ lat: number; lng: number }>(),
-    location: 'New Building',
-    assetType: 'Building',
+    type: "c8y_Building",
+    name: "My new building",
+    coordinates: {},
+    //new Array<{ lat: number; lng: number }>(),
+    location: "New Building",
+    assetType: "Building",
     levels: this.DEFAULT_LEVELS,
   };
   selectedLevel?: MapConfigurationLevel;
@@ -67,7 +83,9 @@ export class MapConfigurationModalComponent implements OnInit, AfterViewInit, On
     if (this.building.id) {
       this.isLoading = true;
       for (const level of this.building.levels) {
-        const markerPromises = level.markers.map((markerId) => this.inventory.detail(markerId));
+        const markerPromises = level.markers.map((markerId) =>
+          this.inventory.detail(markerId)
+        );
         const markerMOs = await Promise.all(markerPromises);
         level.markerManagedObjects = markerMOs.map((r) => r.data);
       }
@@ -76,7 +94,11 @@ export class MapConfigurationModalComponent implements OnInit, AfterViewInit, On
   }
 
   ngAfterViewInit() {
-    this.stepper.selectionChange.pipe(throttleTime(100), takeUntil(this.destroyNotifier$)).subscribe((stepper: Partial<C8yStepper>) => this.onStepperSelectionChange(stepper));
+    this.stepper.selectionChange
+      .pipe(throttleTime(100), takeUntil(this.destroyNotifier$))
+      .subscribe((stepper: Partial<C8yStepper>) =>
+        this.onStepperSelectionChange(stepper)
+      );
   }
 
   ngOnDestroy() {
@@ -85,7 +107,7 @@ export class MapConfigurationModalComponent implements OnInit, AfterViewInit, On
   }
 
   onStepperSelectionChange(stepper: Partial<C8yStepper>) {
-    console.log('Stepper selection change', stepper);
+    console.log("Stepper selection change", stepper);
   }
 
   back() {
@@ -109,7 +131,12 @@ export class MapConfigurationModalComponent implements OnInit, AfterViewInit, On
     for (const level of this.building.levels) {
       for (const mo of level.markerManagedObjects ?? []) {
         if (mo.c8y_IndoorPosition) {
-          markerUpdates.push(this.inventory.update({ id: mo.id, c8y_IndoorPosition: mo.c8y_IndoorPosition }));
+          markerUpdates.push(
+            this.inventory.update({
+              id: mo.id,
+              c8y_IndoorPosition: mo.c8y_IndoorPosition,
+            })
+          );
         }
       }
     }
@@ -122,9 +149,11 @@ export class MapConfigurationModalComponent implements OnInit, AfterViewInit, On
     }
     // create/ update building
     if (this.building.id) {
-      this.building = (await this.inventory.update(this.building)).data as unknown as MapConfiguration;
+      this.building = (await this.inventory.update(this.building))
+        .data as unknown as MapConfiguration;
     } else {
-      this.building = (await this.inventory.create(this.building)).data as unknown as MapConfiguration;
+      this.building = (await this.inventory.create(this.building))
+        .data as unknown as MapConfiguration;
     }
     this.isPending = false;
     this.onSave$.next(this.building);
