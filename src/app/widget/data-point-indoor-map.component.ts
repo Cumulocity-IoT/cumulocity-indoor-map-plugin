@@ -383,88 +383,6 @@ export class DataPointIndoorMapComponent
     }
   }
 
-  /**
-   * Initialize the map based on the configured image for the current floor level.
-   * Floor plan is positioned in the defined bounds.
-   */
-  /* private initMap(building: MapConfiguration, level: number): L.Map {
-    const currentMapConfigurationLevel = building.levels[level];
-    const { width, height } =
-      currentMapConfigurationLevel.imageDetails!.dimensions!;
-    let bounds = this.leaf.latLngBounds([0, 0], [height, width]);
-
-    let zoom =
-      this.config.mapSettings && this.config.mapSettings.zoomLevel
-        ? this.config.mapSettings.zoomLevel
-        : this.DEFAULT_ZOOM_LEVEL;
-    const cachedZoom = localStorage.getItem(
-      `${this.config.mapConfigurationId}-${this.currentFloorLevel}-zoom`
-    );
-    if (cachedZoom != null) {
-      zoom = +cachedZoom;
-    }
-
-    let center: L.LatLngExpression = [height * 0.5, width * 0.5];
-    const cachedCenter = localStorage.getItem(
-      `${this.config.mapConfigurationId}-${this.currentFloorLevel}-center`
-    );
-    if (cachedCenter != null) {
-      center = JSON.parse(cachedCenter);
-    }
-
-    const map = this.leaf.map(this.mapReference.nativeElement, {
-      minZoom: 0,
-      maxZoom: 18,
-      zoomSnap: 0.25,
-      zoomDelta: 0.25,
-      zoom,
-    });
-    if (!!this.config.coordinates) {
-      if (this.config.coordinates?.placementMode === "corners") {
-        const formValue = this.config.coordinates;
-        const southWest = this.leaf.latLng(
-          formValue?.topLeftLat ?? 0,
-          formValue.topLeftLng ?? 0
-        );
-        const northEast = this.leaf.latLng(
-          formValue.bottomRightLat ?? 0,
-          formValue.bottomRightLng ?? 0
-        );
-        bounds = this.leaf.latLngBounds(southWest, northEast);
-        console.log("coming here", bounds);
-      }
-      if (this.config.coordinates?.placementMode === "dimensions") {
-      }
-    }
-
-    this.leaf
-      .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      })
-      .addTo(map);
-    if (currentMapConfigurationLevel.blob) {
-      const imgBlobURL = URL.createObjectURL(currentMapConfigurationLevel.blob);
-      this.leaf
-        .imageOverlay(imgBlobURL, bounds, {
-          opacity: 1,
-          interactive: false,
-          zIndex: -1000,
-        })
-        .addTo(map);
-      fromEvent<L.LeafletEvent>(map, "zoomend")
-        .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.onZoomEnd());
-
-      fromEvent<L.LeafletEvent>(map, "dragend")
-        .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.onDragEnd());
-    }
-    if (bounds) {
-      map.fitBounds(bounds);
-    }
-    return map;
-  } */
   private calculateBounds(): L.LatLngBounds | null {
     if (!!this.config.coordinates) {
       if (this.config.coordinates.placementMode === "dimensions") {
@@ -521,7 +439,6 @@ export class DataPointIndoorMapComponent
 
         return this.leaf.latLngBounds(topLeft, bottomRight);
       } else {
-        // Default to 'corners' mode
         const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
           this.config.coordinates;
 
@@ -543,7 +460,6 @@ export class DataPointIndoorMapComponent
   private initMap(building: MapConfiguration, level: number): L.Map {
     const currentMapConfigurationLevel = building.levels[level];
 
-    // --- 3. Shared map setup logic ---
     const bounds = this.calculateBounds();
     if (!bounds) {
       // Return a default, empty map instance if bounds calculation failed
