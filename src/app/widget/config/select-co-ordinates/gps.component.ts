@@ -64,6 +64,7 @@ function coordinateBoundsValidator(
   selector: "c8y-gps-component",
   templateUrl: "./gps.component.html",
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: `.pad-0{padding:0;}`,
 })
 export class GPSComponent implements OnInit, OnChanges, OnDestroy {
   /*  @ViewChild("modalMap") modalMapContainer!: ElementRef;

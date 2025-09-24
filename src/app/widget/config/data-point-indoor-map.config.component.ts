@@ -320,7 +320,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   onBeforeSave(
     config?: WidgetConfiguration
   ): boolean | Promise<boolean> | Observable<boolean> {
-    if (!config?.mapConfigurationId) {
+    if (!config?.mapConfigurationId || !config?.coordinates?.placementMode) {
       return false;
     }
     return true;

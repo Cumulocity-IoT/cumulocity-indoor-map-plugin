@@ -23,19 +23,17 @@
       @if (placementMode() === 'corners') {
       <form [formGroup]="cornersForm">
         <label>Top-Left Corner</label>
-        <div class="col-xs-12 col-md-6">
+        <div class="col-xs-12 col-md-5 pad-0">
           <c8y-form-group>
-            <div class="col-6">
-              <input
-                formControlName="topLeftLat"
-                type="number"
-                placeholder="Latitude"
-                class="form-control"
-              />
-            </div>
+            <input
+              formControlName="topLeftLat"
+              type="number"
+              placeholder="Latitude"
+              class="form-control"
+            />
           </c8y-form-group>
         </div>
-        <div class="col-xs-12 col-md-6">
+        <div class="col-xs-12 col-md-5">
           <c8y-form-group>
             <input
               formControlName="topLeftLng"
@@ -46,44 +44,52 @@
           </c8y-form-group>
         </div>
 
-        <button
-          type="button"
-          (click)="openModal(cornersForm, 'topLeftLat', 'topLeftLng')"
-          class="btn btn-link"
-        >
-          Pick from map
-        </button>
-
-        <fieldset class="form-group">
-          <label>Bottom-Right Corner</label>
-          <div class="col-xs-12 col-md-6">
-            <c8y-form-group>
-              <input
-                formControlName="bottomRightLat"
-                type="number"
-                placeholder="Latitude"
-                class="form-control"
-              />
-            </c8y-form-group>
-          </div>
-          <div class="col-xs-12 col-md-6">
-            <c8y-form-group>
-              <input
-                formControlName="bottomRightLng"
-                type="number"
-                placeholder="Longitude"
-                class="form-control"
-              />
-            </c8y-form-group>
-          </div>
+        <div class="col-xs-12 col-md-2">
           <button
-            type="button"
-            (click)="openModal(cornersForm, 'bottomRightLat', 'bottomRightLng')"
-            class="btn btn-link"
+            container="body"
+            placement="top"
+            class="btn btn-default"
+            (click)="openModal(cornersForm, 'topLeftLat', 'topLeftLng')"
+            title="Pick from map"
           >
-            Pick from map
+            <i c8yicon="target" class="c8y-icon dlt-c8y-icon-target"></i>
           </button>
-        </fieldset>
+        </div>
+
+        <div class="col-xs-12 col-md-12 pad-0">
+          <label>Bottom-Right Corner</label>
+        </div>
+        <div class="col-xs-12 col-md-5 pad-0">
+          <c8y-form-group>
+            <input
+              formControlName="bottomRightLat"
+              type="number"
+              placeholder="Latitude"
+              class="form-control"
+            />
+          </c8y-form-group>
+        </div>
+        <div class="col-xs-12 col-md-5">
+          <c8y-form-group>
+            <input
+              formControlName="bottomRightLng"
+              type="number"
+              placeholder="Longitude"
+              class="form-control"
+            />
+          </c8y-form-group>
+        </div>
+        <div class="col-xs-12 col-md-2">
+          <button
+            container="body"
+            placement="top"
+            class="btn btn-default"
+            title="Pick from map"
+            (click)="openModal(cornersForm, 'bottomRightLat', 'bottomRightLng')"
+          >
+            <i c8yicon="target" class="c8y-icon dlt-c8y-icon-target"></i>
+          </button>
+        </div>
 
         @if (cornersForm.hasError('invalidBounds') && (cornersForm.touched ||
         cornersForm.dirty)) {
@@ -96,7 +102,7 @@
       <form [formGroup]="dimensionsForm">
         <fieldset class="form-group">
           <label>Anchor (Top-Left)</label>
-          <div class="col-xs-12 col-md-6">
+          <div class="col-xs-12 col-md-5 pad-0">
             <c8y-form-group>
               <input
                 formControlName="anchorLat"
@@ -106,7 +112,7 @@
               />
             </c8y-form-group>
           </div>
-          <div class="col-xs-12 col-md-6">
+          <div class="col-xs-12 col-md-5">
             <c8y-form-group>
               <input
                 formControlName="anchorLng"
@@ -117,13 +123,15 @@
             </c8y-form-group>
           </div>
 
-          <div class="m-t-8">
+          <div class="col-xs-12 col-md-2">
             <button
-              type="button"
+              container="body"
+              placement="top"
+              class="btn btn-default"
+              title="Pick from map"
               (click)="openModal(dimensionsForm, 'anchorLat', 'anchorLng')"
-              class="btn btn-link"
             >
-              Pick from map
+              <i c8yicon="target" class="c8y-icon dlt-c8y-icon-target"></i>
             </button>
           </div>
           @if(locationError()) {
@@ -133,7 +141,7 @@
 
         <fieldset class="form-group">
           <label>Dimensions</label>
-          <div class="col-xs-12 col-md-6">
+          <div class="col-xs-12 col-md-6 pad-0">
             <c8y-form-group>
               <input
                 formControlName="width"
@@ -157,7 +165,7 @@
 
         <fieldset class="form-group">
           <label>Scale (X,Y)</label>
-          <div class="col-xs-12 col-md-6">
+          <div class="col-xs-12 col-md-6 pad-0">
             <c8y-form-group>
               <input
                 formControlName="scaleX"
@@ -178,7 +186,7 @@
             </c8y-form-group>
           </div>
           <label>Offset (X,Y)</label>
-          <div class="col-xs-12 col-md-6">
+          <div class="col-xs-12 col-md-6 pad-0">
             <c8y-form-group>
               <input
                 formControlName="offsetX"
