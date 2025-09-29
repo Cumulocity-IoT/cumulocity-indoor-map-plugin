@@ -462,16 +462,10 @@ export class DataPointIndoorMapComponent
 
     const bounds = this.calculateBounds();
     if (!bounds) {
-      // Return a default, empty map instance if bounds calculation failed
       return this.leaf.map(this.mapReference.nativeElement);
     }
 
-    const map = this.leaf.map(this.mapReference.nativeElement, {
-      minZoom: 0,
-      maxZoom: 18,
-      zoomSnap: 0.25,
-      zoomDelta: 0.25,
-    });
+    const map = this.leaf.map(this.mapReference.nativeElement);
 
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -488,7 +482,10 @@ export class DataPointIndoorMapComponent
           interactive: true,
         })
         .addTo(map);
+      const zoom = this.config.mapSettings.zoomLevel;
+      const center = this.getCenterCoordinates(this.config.coordinates);
 
+      map.setView(center, zoom);
       map.fitBounds(bounds);
 
       fromEvent<L.LeafletEvent>(map, "zoomend")
@@ -502,6 +499,7 @@ export class DataPointIndoorMapComponent
 
     return map;
   }
+
   private onZoomEnd() {
     /* localStorage.setItem(
       `${this.config.mapConfigurationId}-${this.currentFloorLevel}-zoom`,
@@ -516,44 +514,85 @@ export class DataPointIndoorMapComponent
     );
   }
 
+  getCenterCoordinates(coordinates: any): [number, number] {
+    if (coordinates?.placementMode === "corners") {
+      const centerLat =
+        (coordinates.topLeftLat + coordinates.bottomRightLat) / 2;
+      const centerLng =
+        (coordinates.topLeftLng + coordinates.bottomRightLng) / 2;
+      console.log(centerLat, centerLng);
+
+      return [centerLat, centerLng];
+    } else if (coordinates?.placementMode === "dimensions") {
+      const centerLat =
+        coordinates.anchorLat +
+        coordinates.offsetY +
+        (coordinates.height / 2) * coordinates.scaleY;
+      const centerLng =
+        coordinates.anchorLng +
+        coordinates.offsetX +
+        (coordinates.width / 2) * coordinates.scaleX;
+      console.log(centerLat, centerLng);
+      return [centerLat, centerLng];
+    } else {
+      return [51.23544, 6.79599];
+    }
+  }
+
   private updateMapLevel(level: MapConfigurationLevel) {
     const map = this.map!;
+
     map.eachLayer((layer) => {
       layer.removeFrom(map);
     });
 
-    const { width, height } = level.imageDetails!.dimensions!;
-    const bounds = this.leaf.latLngBounds([0, 0], [height, width]);
+    // Add the base tile layer
+    this.leaf
+      .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      })
+      .addTo(map);
+
+    // Fetch the bounds using the shared calculateBounds function
+    const bounds = this.calculateBounds();
+
+    // If no valid bounds are returned, return early
+    if (!bounds) {
+      return;
+    }
+
+    /*  const map = this.leaf.map(this.mapReference.nativeElement, {
+      minZoom: 0,
+      maxZoom: 18,
+      zoomSnap: 0.25,
+      zoomDelta: 0.25,
+    }); */
 
     if (level.blob) {
       const imgBlobURL = URL.createObjectURL(level.blob);
       const imageOverlay = this.leaf.imageOverlay(imgBlobURL, bounds, {
         opacity: 1,
-        interactive: false,
-        zIndex: -1000,
+        interactive: true,
       });
       imageOverlay.addTo(map);
 
-      let zoom: number | undefined = undefined;
-      const cachedZoom = localStorage.getItem(
-        `${this.config.mapConfigurationId}-${this.currentFloorLevel}-zoom`
-      );
-      if (cachedZoom != null) {
-        zoom = +cachedZoom;
-      }
+      const zoom = this.config.mapSettings.zoomLevel;
+      const center = this.getCenterCoordinates(this.config.coordinates);
 
-      const cachedCenter = localStorage.getItem(
-        `${this.config.mapConfigurationId}-${this.currentFloorLevel}-center`
-      );
-      if (cachedCenter != null) {
-        const center = JSON.parse(cachedCenter);
-        map.setView(center, zoom);
-      } else {
-        map.fitBounds(imageOverlay.getBounds());
-      }
+      map.setView(center, zoom);
+      map.fitBounds(imageOverlay.getBounds());
+
+      // Add event listeners for zoom and drag
+      fromEvent<L.LeafletEvent>(map, "zoomend")
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(() => this.onZoomEnd());
+
+      fromEvent<L.LeafletEvent>(map, "dragend")
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(() => this.onDragEnd());
     }
   }
-
   /**
    * initialize the map markers for the current floor level
    */
@@ -753,8 +792,7 @@ export class DataPointIndoorMapComponent
     let contentString = this.getPopupHeader(managedObject);
 
     if (!measurements || measurements.length === 0) {
-      contentString +=
-        '<p style="text-align:center">Loading measurements...</p>';
+      contentString += `<p style="text-align:center">Type : ${managedObject["type"]}</p>`;
       return contentString;
     }
 
@@ -847,13 +885,6 @@ export class DataPointIndoorMapComponent
     }
 
     return this.MARKER_DEFAULT_COLOR;
-
-    // const threshold = this.config.legend.thresholds.find((threshold) => measurement.value >= threshold.min && measurement.value <= threshold.max);
-    // if (!threshold) {
-    //   return this.MARKER_DEFAULT_COLOR;
-    // }
-
-    // return threshold.color;
   }
 
   private isMarkersAvailableForCurrentFloorLevel(level: number): boolean {

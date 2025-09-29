@@ -1,20 +1,23 @@
-import { Component } from '@angular/core';
-import { IIdentified } from '@c8y/client';
-import { CommonModule, CoreModule } from '@c8y/ngx-components';
-import { AssetSelectionChangeEvent, AssetSelectorModule } from '@c8y/ngx-components/assets-navigator';
-import { BsModalRef } from 'ngx-bootstrap/modal';
-import { Subject } from 'rxjs';
+import { Component } from "@angular/core";
+import { IIdentified, IManagedObject } from "@c8y/client";
+import { CommonModule, CoreModule } from "@c8y/ngx-components";
+import {
+  AssetSelectionChangeEvent,
+  AssetSelectorModule,
+} from "@c8y/ngx-components/assets-navigator";
+import { BsModalRef } from "ngx-bootstrap/modal";
+import { Subject } from "rxjs";
 
 @Component({
-  selector: 'device-selector-modal',
-  templateUrl: './device-selector-modal.component.html',
+  selector: "device-selector-modal",
+  templateUrl: "./device-selector-modal.component.html",
   standalone: true,
   imports: [CommonModule, AssetSelectorModule, CoreModule],
 })
 export class DeviceSelectorModalComponent {
   config = {
     columnHeaders: true,
-    groupsSelectable: false,
+    groupsSelectable: true,
     groupsOnly: false,
     multi: true,
     required: false,
@@ -23,17 +26,19 @@ export class DeviceSelectorModalComponent {
     showFilter: true,
     showUnassignedDevices: true,
     singleColumn: false,
-    label: 'Asset selection',
+    modelMode: "full",
+    label: "Asset selection",
   };
-  model?: IIdentified;
-  selectedItems: IIdentified[] = [];
+  model?: IManagedObject;
+  selectedItems: IManagedObject[] = [];
 
-  closeSubject: Subject<IIdentified[] | undefined> = new Subject();
+  closeSubject: Subject<IManagedObject[] | undefined> = new Subject();
 
   constructor(private modal: BsModalRef) {}
 
   selectionChanged(event: AssetSelectionChangeEvent) {
-    this.selectedItems = event.items as IIdentified[];
+    console.log(event, "device");
+    this.selectedItems = event.items as IManagedObject[];
   }
 
   onSubmit(): void {
