@@ -60,7 +60,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   ) {}
 
   indoorMapConfig = {
-    placementMode: "corners",
     topLeftLat: 52.52,
     topLeftLng: 13.4,
     bottomRightLat: 52.51,
@@ -311,16 +310,20 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     this.config?.legend?.thresholds?.splice(indexExistingThresholdToDelete, 1);
   }
 
+  /*   onGpsConfigChange(newConfig: any): void {
+    console.log("Parent received new config:", newConfig);
+    this.config.coordinates = newConfig; // This line correctly updates the configuration
+    this.isSaved = false; // Mark as unsaved since data has changed
+  } */
   onGpsConfigChange(newConfig: any): void {
     console.log("Parent received new config:", newConfig);
-    this.config.coordinates = newConfig;
-    this.isSaved = false; // Mark as unsaved since data has changed
+    this.config.coordinates = newConfig; // This line ensures the saved coordinates are updated
+    this.isSaved = false;
   }
-
   onBeforeSave(
     config?: WidgetConfiguration
   ): boolean | Promise<boolean> | Observable<boolean> {
-    if (!config?.mapConfigurationId || !config?.coordinates?.placementMode) {
+    if (!config?.mapConfigurationId || !config?.coordinates) {
       return false;
     }
     return true;

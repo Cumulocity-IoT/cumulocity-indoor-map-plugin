@@ -385,7 +385,7 @@ export class DataPointIndoorMapComponent
 
   private calculateBounds(): L.LatLngBounds | null {
     if (!!this.config.coordinates) {
-      if (this.config.coordinates.placementMode === "dimensions") {
+      /*  if (this.config.coordinates.placementMode === "dimensions") {
         const {
           anchorLat,
           anchorLng,
@@ -438,22 +438,22 @@ export class DataPointIndoorMapComponent
         );
 
         return this.leaf.latLngBounds(topLeft, bottomRight);
-      } else {
-        const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
-          this.config.coordinates;
+      } else { */
+      const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
+        this.config.coordinates;
 
-        if (!topLeftLat || !topLeftLng || !bottomRightLat || !bottomRightLng) {
-          console.error(
-            "GPS corner coordinates are missing from the configuration."
-          );
-          return null;
-        }
-
-        const southWest = this.leaf.latLng(bottomRightLat, topLeftLng);
-        const northEast = this.leaf.latLng(topLeftLat, bottomRightLng);
-        return this.leaf.latLngBounds(southWest, northEast);
+      if (!topLeftLat || !topLeftLng || !bottomRightLat || !bottomRightLng) {
+        console.error(
+          "GPS corner coordinates are missing from the configuration."
+        );
+        return null;
       }
+
+      const southWest = this.leaf.latLng(bottomRightLat, topLeftLng);
+      const northEast = this.leaf.latLng(topLeftLat, bottomRightLng);
+      return this.leaf.latLngBounds(southWest, northEast);
     }
+    //}
     return null;
   }
 
@@ -515,7 +515,7 @@ export class DataPointIndoorMapComponent
   }
 
   getCenterCoordinates(coordinates: any): [number, number] {
-    if (coordinates?.placementMode === "corners") {
+    if (coordinates) {
       const centerLat =
         (coordinates.topLeftLat + coordinates.bottomRightLat) / 2;
       const centerLng =
@@ -523,7 +523,7 @@ export class DataPointIndoorMapComponent
       console.log(centerLat, centerLng);
 
       return [centerLat, centerLng];
-    } else if (coordinates?.placementMode === "dimensions") {
+    } /* else if (coordinates?.placementMode === "dimensions") {
       const centerLat =
         coordinates.anchorLat +
         coordinates.offsetY +
@@ -534,7 +534,7 @@ export class DataPointIndoorMapComponent
         (coordinates.width / 2) * coordinates.scaleX;
       console.log(centerLat, centerLng);
       return [centerLat, centerLng];
-    } else {
+    } */ else {
       return [51.23544, 6.79599];
     }
   }

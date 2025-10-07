@@ -71,15 +71,6 @@ export interface GPSCoordinates {
   topLeftLng?: number;
   bottomRightLat?: number;
   bottomRightLng?: number;
-  anchorLat?: number;
-  anchorLng?: number;
-  width?: number;
-  height?: number;
-  scaleX?: number;
-  scaleY?: number;
-  offsetX?: number;
-  offsetY?: number;
-  placementMode?: string;
 }
 
 export function isMapConfigutaration(obj: any): obj is MapConfiguration {
