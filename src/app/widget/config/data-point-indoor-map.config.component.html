@@ -77,7 +77,7 @@
 </c8y-form-group> -->
 <c8y-form-group>
   <c8y-gps-component
-    [initialConfig]="config.coordinates ?? indoorMapConfig"
+    [initialConfig]="config.coordinates ?? {}"
     (configChange)="onGpsConfigChange($event)"
   ></c8y-gps-component>
 </c8y-form-group>

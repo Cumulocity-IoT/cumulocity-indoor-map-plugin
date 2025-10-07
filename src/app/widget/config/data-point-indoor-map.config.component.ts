@@ -17,7 +17,7 @@
  */
 import { Component, Input, OnInit } from "@angular/core";
 import { BsModalService } from "ngx-bootstrap/modal";
-import { AlertService, OnBeforeSave } from "@c8y/ngx-components";
+import { OnBeforeSave } from "@c8y/ngx-components";
 import { DataPointIndoorMapConfigService } from "../data-point-indoor-map.config.service";
 import { AddThresholdModalComponent } from "./add-threshold-modal/add-threshold-modal.component";
 import {
@@ -55,7 +55,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   isSaved = false;
   constructor(
     private configService: DataPointIndoorMapConfigService,
-    private alertService: AlertService,
     private modalService: BsModalService
   ) {}
 
@@ -310,22 +309,35 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     this.config?.legend?.thresholds?.splice(indexExistingThresholdToDelete, 1);
   }
 
-  /*   onGpsConfigChange(newConfig: any): void {
-    console.log("Parent received new config:", newConfig);
-    this.config.coordinates = newConfig; // This line correctly updates the configuration
-    this.isSaved = false; // Mark as unsaved since data has changed
-  } */
   onGpsConfigChange(newConfig: any): void {
     console.log("Parent received new config:", newConfig);
-    this.config.coordinates = newConfig; // This line ensures the saved coordinates are updated
+    this.config.coordinates = newConfig;
     this.isSaved = false;
   }
+
   onBeforeSave(
     config?: WidgetConfiguration
   ): boolean | Promise<boolean> | Observable<boolean> {
-    if (!config?.mapConfigurationId || !config?.coordinates) {
+    if (!config?.mapConfigurationId) {
       return false;
     }
+
+    const coords = config.coordinates as any;
+
+    const hasValidCorners =
+      coords?.placementMode === "corners" &&
+      coords.topLeftLat &&
+      coords.topLeftLng &&
+      coords.bottomRightLat &&
+      coords.bottomRightLng;
+
+    const hasValidPolygon =
+      coords?.placementMode === "polygon" && coords.polygonVerticesJson;
+
+    if (!hasValidCorners && !hasValidPolygon) {
+      return false;
+    }
+
     return true;
   }
 }

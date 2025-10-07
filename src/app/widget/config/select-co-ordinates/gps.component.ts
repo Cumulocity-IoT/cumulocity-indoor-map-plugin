@@ -4,11 +4,9 @@ import {
   AfterViewInit,
   OnDestroy,
   signal,
-  computed,
   effect,
-  // ... other imports
-  Input, // ADDED: Import Input
-  OnInit, // ADDED: Import OnInit
+  Input,
+  OnInit,
   ViewEncapsulation,
   EventEmitter,
   Output,
@@ -25,9 +23,7 @@ import { GPSCoordinates } from "../../data-point-indoor-map.model";
   styleUrls: ["./gps.component.less"],
   encapsulation: ViewEncapsulation.None,
 })
-// ADDED: OnInit to the implemented interfaces
 export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
-  // ADDED: Input property to receive initial configuration (from the parent component's 'config.coordinates')
   @Input() initialConfig: GPSCoordinates = {
     topLeftLat: 0,
     topLeftLng: 0,
@@ -38,30 +34,29 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private map: L.Map | undefined;
   private featureGroup: L.FeatureGroup | undefined;
+  polygonVertices = signal<L.LatLng[][] | null>(null);
 
-  // ... (other signals remain the same)
-
-  // Initialized the imageBounds signal here, will update it in ngOnInit
   imageBounds = signal({
     tl: { lat: 0, lng: 0 },
     br: { lat: 0, lng: 0 },
   });
 
-  // ... (canPlaceOverlay and constructor logic remains the same)
   constructor() {
-    // ... (existing effects for rotation and emitConfigChange)
-
-    // ADDED: Effect to draw the saved boundary when map is ready and bounds are non-zero
     effect(() => {
       const bounds = this.imageBounds();
-      // Check if map is ready and coordinates are valid (non-zero)
-      if (this.map && bounds.tl.lat !== 0 && bounds.br.lat !== 0) {
+      if (this.map && (bounds.tl.lat !== 0 || this.polygonVertices())) {
         this.drawSavedBoundary(bounds);
       }
     });
+    effect(
+      () => {
+        const bounds = this.imageBounds();
+        this.emitConfigChange(bounds);
+      },
+      { allowSignalWrites: true }
+    );
   }
 
-  // ADDED: OnInit to populate imageBounds from Input
   ngOnInit(): void {
     if (this.initialConfig.topLeftLat !== 0) {
       this.imageBounds.set({
@@ -75,8 +70,22 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         },
       });
     }
-    // We can also infer the initial drawing type here if the configuration stored it (e.g., this.initialConfig.placementMode === 'polygon')
-    // For now, we assume it's bounds defined by corners (rectangle/bounding box of polygon).
+
+    if (this.initialConfig.polygonVerticesJson) {
+      try {
+        const savedVertices = JSON.parse(
+          this.initialConfig.polygonVerticesJson
+        );
+        // Convert plain object array back to L.LatLng objects
+        const latLngs = savedVertices.map((ring: any[]) =>
+          ring.map((v) => L.latLng(v.lat, v.lng))
+        );
+        this.polygonVertices.set(latLngs);
+      } catch (e) {
+        console.error("Failed to parse polygon vertices:", e);
+        this.polygonVertices.set(null);
+      }
+    }
   }
 
   ngAfterViewInit(): void {
@@ -90,8 +99,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   private initMap(): void {
     // Basic map setup
     this.map = L.map("gps-map", {
-      center: [52.52, 13.4], // Example coordinates (Berlin)
-      zoom: 13,
+      center: [52.52, 13.4],
+      zoom: 15,
     });
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -103,33 +112,46 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     this.initDrawControl();
   }
 
-  // ADDED: Function to draw the saved shape
   private drawSavedBoundary(bounds: {
     tl: { lat: number; lng: number };
     br: { lat: number; lng: number };
   }): void {
     if (!this.map || !this.featureGroup) return;
 
-    this.featureGroup.clearLayers(); // Ensure map is clean before drawing saved shape
+    this.featureGroup.clearLayers();
 
-    // Create Leaflet bounds object
-    const leafletBounds = L.latLngBounds(
-      L.latLng(bounds.tl.lat, bounds.tl.lng),
-      L.latLng(bounds.br.lat, bounds.br.lng)
-    );
+    let layerToDraw: L.Layer | undefined;
+    let leafletBounds: L.LatLngBounds | undefined;
 
-    const savedRectangle = L.rectangle(leafletBounds, {
-      color: "#ff0000",
-      weight: 1,
-      dashArray: "5, 5", // Use a dashed line to indicate it's the saved boundary
-    });
+    const vertices = this.polygonVertices();
+    if (vertices) {
+      layerToDraw = L.polygon(vertices, {
+        color: "#ff0000",
+        weight: 1,
+        dashArray: "5, 5",
+        fillOpacity: 0.1,
+      });
+      leafletBounds = (layerToDraw as L.Polygon).getBounds();
+    } else if (bounds.tl.lat !== 0) {
+      leafletBounds = L.latLngBounds(
+        L.latLng(bounds.tl.lat, bounds.tl.lng),
+        L.latLng(bounds.br.lat, bounds.br.lng)
+      );
 
-    this.featureGroup.addLayer(savedRectangle);
+      layerToDraw = L.rectangle(leafletBounds, {
+        color: "#ff0000",
+        weight: 1,
+        dashArray: "5, 5",
+      });
+    } else {
+      return;
+    }
 
-    // Zoom the map to fit the boundary
-    this.map.fitBounds(leafletBounds);
+    if (layerToDraw && leafletBounds) {
+      this.featureGroup.addLayer(layerToDraw);
+      this.map.fitBounds(leafletBounds);
+    }
   }
-
   private updateImageBoundsFromLeaflet(bounds: L.LatLngBounds): void {
     const tl = bounds.getNorthWest(); // Top-Left (North-West)
     const br = bounds.getSouthEast(); // Bottom-Right (South-East)
@@ -138,19 +160,31 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       tl: { lat: tl.lat, lng: tl.lng },
       br: { lat: br.lat, lng: br.lng },
     });
+
+    this.polygonVertices.set(null);
   }
 
-  // Emit configuration change to parent
   private emitConfigChange(bounds: {
     tl: { lat: number; lng: number };
     br: { lat: number; lng: number };
   }): void {
+    const vertices = this.polygonVertices();
+    let polygonVerticesJson: string | undefined = undefined;
+
+    if (vertices) {
+      // Serialize L.LatLng objects to a JSON string for storage
+      polygonVerticesJson = JSON.stringify(
+        vertices.map((ring) => ring.map((v) => ({ lat: v.lat, lng: v.lng })))
+      );
+    }
+
     const config = {
-      placementMode: "corners",
+      placementMode: vertices ? "polygon" : "corners",
       topLeftLat: bounds.tl.lat,
       topLeftLng: bounds.tl.lng,
       bottomRightLat: bounds.br.lat,
       bottomRightLng: bounds.br.lng,
+      polygonVerticesJson: polygonVerticesJson,
     };
     this.configChange.emit(config);
   }
@@ -176,7 +210,11 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
             color: "#ff0000",
           },
         },
-        polygon: true,
+        polygon: {
+          shapeOptions: {
+            color: "#ff0000",
+          },
+        },
       },
     });
 
@@ -190,18 +228,47 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
       this.featureGroup?.addLayer(layer);
 
-      if (type === "rectangle" || type === "polygon") {
-        const bounds = layer.getBounds();
-        this.updateImageBoundsFromLeaflet(bounds);
+      if (
+        layer instanceof L.Rectangle ||
+        layer instanceof L.Polygon ||
+        layer instanceof L.Circle
+      ) {
+        this.updateImageBoundsFromLeaflet(layer.getBounds());
+      }
+      if (type === "polygon") {
+        const latLngs = layer.getLatLngs();
+
+        if (latLngs.length > 0 && latLngs[0] instanceof L.LatLng) {
+          this.polygonVertices.set([latLngs as L.LatLng[]]);
+        } else {
+          this.polygonVertices.set(latLngs as L.LatLng[][]);
+        }
+      } else if (type === "rectangle") {
+        this.polygonVertices.set(null);
       }
     });
 
-    // Listen for the 'draw:edited' event
     this.map.on((L.Draw as any).Event.EDITED, (e: any) => {
       e.layers.each((layer: any) => {
-        if (layer.getBounds) {
+        if (
+          layer instanceof L.Rectangle ||
+          layer instanceof L.Polygon ||
+          layer instanceof L.Circle
+        ) {
           const bounds = layer.getBounds();
           this.updateImageBoundsFromLeaflet(bounds);
+        }
+
+        if (layer instanceof L.Polygon) {
+          const latLngs = layer.getLatLngs();
+
+          if (latLngs.length > 0 && latLngs[0] instanceof L.LatLng) {
+            this.polygonVertices.set([latLngs as L.LatLng[]]);
+          } else {
+            this.polygonVertices.set(latLngs as L.LatLng[][]);
+          }
+        } else {
+          this.polygonVertices.set(null);
         }
       });
     });

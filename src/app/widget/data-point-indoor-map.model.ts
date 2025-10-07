@@ -71,6 +71,8 @@ export interface GPSCoordinates {
   topLeftLng?: number;
   bottomRightLat?: number;
   bottomRightLng?: number;
+  polygonVerticesJson?: string;
+  placementMode?: string;
 }
 
 export function isMapConfigutaration(obj: any): obj is MapConfiguration {
