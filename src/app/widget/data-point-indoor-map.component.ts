@@ -467,6 +467,9 @@ export class DataPointIndoorMapComponent
 
     const map = this.leaf.map(this.mapReference.nativeElement);
 
+    // Overwrite the default prefix for map controls
+    this.leaf.Control.Attribution.prototype.options.prefix = false;
+
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
@@ -482,6 +485,7 @@ export class DataPointIndoorMapComponent
           interactive: true,
         })
         .addTo(map);
+
       const zoom = this.config.mapSettings.zoomLevel;
       const center = this.getCenterCoordinates(this.config.coordinates);
 
