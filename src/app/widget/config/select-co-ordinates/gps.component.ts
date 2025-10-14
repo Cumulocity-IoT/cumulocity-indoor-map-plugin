@@ -34,7 +34,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   };
   // NOTE: Assuming your initialConfig model now includes a polygonVerticesJson property
   @Output() configChange = new EventEmitter<any>();
+  @Output() boundaryChange = new EventEmitter<GPSCoordinates>();
 
+  @ViewChild("boundaryMap", { read: ElementRef, static: true })
+  mapReference!: ElementRef;
   private map: L.Map | undefined;
   private featureGroup: L.FeatureGroup | undefined;
   polygonVertices = signal<L.LatLng[][] | null>(null);
