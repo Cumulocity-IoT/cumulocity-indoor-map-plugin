@@ -10,10 +10,13 @@ import {
   ViewEncapsulation,
   EventEmitter,
   Output,
+  ViewChild,
+  ElementRef,
 } from "@angular/core";
 import * as L from "leaflet";
 import "@geoman-io/leaflet-geoman-free";
 import { GPSCoordinates } from "../../data-point-indoor-map.model";
+import { BsModalRef } from "ngx-bootstrap/modal";
 
 @Component({
   selector: "c8y-gps-component",
@@ -41,7 +44,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     br: { lat: 0, lng: 0 },
   });
 
-  constructor() {
+  constructor(private bsModalRef: BsModalRef) {
     effect(() => {
       const bounds = this.imageBounds();
       if (this.map && (bounds.tl.lat !== 0 || this.polygonVertices())) {
@@ -95,10 +98,19 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.initMap();
+
+    // 🌟 FIX 2: Force redraw after modal transition to correct container size
+    if (this.map) {
+      setTimeout(() => {
+        this.map!.invalidateSize();
+        console.log("Map size invalidated for modal rendering.");
+      }, 300); // 300ms delay is usually safe for modals
+    }
   }
+
   private initMap(): void {
-    // Basic map setup
-    this.map = L.map("gps-map", {
+    // 🌟 FIX 1: Initialize map using the ElementRef's native element, not a hardcoded ID
+    this.map = L.map(this.mapReference.nativeElement, {
       center: [52.52, 13.4],
       zoom: 15,
     });
@@ -276,5 +288,16 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.map.off();
       this.map.remove();
     }
+  }
+
+  onCancel(): void {
+    this.boundaryChange.emit();
+    this.bsModalRef.hide();
+  }
+
+  onSave(): void {
+    const bounds = this.imageBounds();
+    this.emitConfigChange(bounds);
+    this.bsModalRef.hide();
   }
 }

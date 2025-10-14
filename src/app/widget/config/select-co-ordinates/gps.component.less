@@ -1,10 +1,61 @@
 @import "~@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
+// 1. Define a fixed height for the component's host element. 
+// This is the most reliable way to size the map, as 100% often fails inside modals.
+:host {
+    display: block;
+    /* Use a fixed height (e.g., 400px) on the host or a known ancestor */
+    height: 400px; 
+    width: 100%;
+}
+
+// 2. Target the map container elements to take 100% of the host's defined size.
+.marker-map-container,
+.marker-map-frame,
+#boundaryMap {
+    /* Use !important only if necessary to override external modal styles */
+    height: 100%; 
+    width: 100%;
+    padding-bottom: 40px;
+}
+
+// Ensure this style is correctly scoped if you use it:
+.modal-body {
+     height: 70vh; 
+}
+
 .mar-0 {
   margin: 0;
 }
 
-#gps-map {
-  height: 400px;
-  width: 100%;
+// 1. Force the modal body to take a defined height
+.modal-body.map-modal-body {
+    // You already had 60vh, which is good, but enforce it on the specific class:
+    min-height: 60vh;
+    // Ensure height is not auto/collapsed
+    height: 100%; 
+    display: flex; // Use flex to help children fill height
+    flex-direction: column;
+}
+
+// 2. Ensure the row inside the modal body fills the height
+.map-content-wrapper {
+    flex-grow: 1; // Allows the row to fill the height of the flex container
+    height: 100%;
+}
+
+// 3. Ensure the map's column wrapper fills the remaining height
+.map-container-col {
+    // You might need to set a fixed height here if the row/col system collapses
+    // OR ensure that your application's row/col system propagates height correctly
+    height: 100%; 
+    padding: 0;
+}
+
+// 4. Final map container must be 100%
+.marker-map-container,
+.marker-map-frame,
+#boundaryMap {
+    height: 100%; 
+    width: 100%;
 }

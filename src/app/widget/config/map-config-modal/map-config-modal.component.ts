@@ -130,11 +130,11 @@ export class MapConfigurationModalComponent
     const markerUpdates: Promise<IResult<IManagedObject>>[] = [];
     for (const level of this.building.levels) {
       for (const mo of level.markerManagedObjects ?? []) {
-        if (mo.c8y_IndoorPosition) {
+        if (mo.c8y_Position) {
           markerUpdates.push(
             this.inventory.update({
               id: mo.id,
-              c8y_IndoorPosition: mo.c8y_IndoorPosition,
+              c8y_IndoorPosition: mo.c8y_Position,
             })
           );
         }

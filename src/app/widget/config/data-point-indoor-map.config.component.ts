@@ -1,8 +1,24 @@
+/**
+ * Copyright (c) 2022 Software AG, Darmstadt, Germany and/or its licensors
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-20.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 import { Component, Input, OnInit } from "@angular/core";
 import { BsModalService } from "ngx-bootstrap/modal";
 import { OnBeforeSave } from "@c8y/ngx-components";
 import { DataPointIndoorMapConfigService } from "../data-point-indoor-map.config.service";
-import { AddThresholdModalComponent } from "./add-threshold-modal/add-threshold-modal.component";
 import {
   DatapointPopup,
   MapConfiguration,
@@ -14,6 +30,11 @@ import { isNil } from "lodash";
 import { MapConfigurationModalComponent } from "./map-config-modal/map-config-modal.component";
 import { Observable } from "rxjs";
 import { CdkDragDrop, moveItemInArray } from "@angular/cdk/drag-drop";
+import { Coordinates } from "../models/coordinates.model";
+import { AssignLocationModalComponent } from "./map-config-modal/assign-locations-step/assign-locations-modal.component";
+import { GPSComponent } from "./select-co-ordinates/gps.component";
+// Assuming you have an EditLocationModalComponent to host the map
+// import { EditLocationModalComponent } from "./edit-location-modal/edit-location-modal.component";
 
 @Component({
   selector: "data-point-indoor-map-configuration",
@@ -31,16 +52,12 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   dataPointSeries: string[] = [];
 
-  selectedMapConfiguration?: MapConfiguration;
+  selectedBuilding?: MapConfiguration;
   selectedMapConfigurationId?: string;
 
   selectedDataPoint: string | undefined = "";
   isSaving = false;
   isSaved = false;
-  constructor(
-    private configService: DataPointIndoorMapConfigService,
-    private modalService: BsModalService
-  ) {}
 
   indoorMapConfig = {
     topLeftLat: 52.52,
@@ -48,6 +65,12 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     bottomRightLat: 52.51,
     bottomRightLng: 13.41,
   };
+
+  constructor(
+    private configService: DataPointIndoorMapConfigService,
+    private modalService: BsModalService
+  ) {}
+
   ngOnInit() {
     this.initConfiguration();
     this.initMapConfigurations();
@@ -67,13 +90,21 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onEditMapConfiguration(): void {
-    const initialState = { building: this.selectedMapConfiguration };
+    if (this.selectedBuilding && this.config.coordinates) {
+      // Ensure the coordinates from the main config are passed for editing, if they exist
+      this.selectedBuilding.coordinates = {
+        ...(this.config.coordinates as Coordinates),
+      };
+    }
+    console.log("Editing map configuration", this.selectedBuilding);
+    console.log(this.config);
+    const initialState = { building: this.selectedBuilding };
     const modal = this.modalService.show(MapConfigurationModalComponent, {
       initialState,
       class: "modal-lg",
     });
     modal.content?.onSave$.subscribe((mapConfiguration) => {
-      this.selectedMapConfiguration = mapConfiguration;
+      this.selectedBuilding = mapConfiguration;
       this.onMapConfigurationChanged();
     });
   }
@@ -96,7 +127,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
               mapConfiguration.id !== this.selectedMapConfigurationId
           );
           this.selectedMapConfigurationId = undefined;
-          this.selectedMapConfiguration = undefined;
+          this.selectedBuilding = undefined;
           this.updateDataPointSeries();
         }
       });
@@ -108,8 +139,13 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
         mapConfiguration.id === this.selectedMapConfigurationId
     );
     if (this.selectedMapConfigurationId && selectedMapConfiguration) {
-      this.selectedMapConfiguration = selectedMapConfiguration;
+      this.selectedBuilding = selectedMapConfiguration;
       this.config.mapConfigurationId = this.selectedMapConfigurationId;
+
+      // Update config coordinates if building has stored coordinates
+      if (selectedMapConfiguration.coordinates) {
+        this.config.coordinates = selectedMapConfiguration.coordinates;
+      }
     }
     this.updateDataPointSeries();
   }
@@ -122,16 +158,51 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     };
   }
 
-  onThresholdClicked(threshold: Threshold) {
-    this.displayAddThresholdModal(threshold);
-  }
-
-  onAddThresholdButtonClicked(): void {
-    this.displayAddThresholdModal();
-  }
-
   onUpdateDatapointsButtonClicked(): void {
     this.displayUpdateDatapointsPopupModal();
+  }
+
+  // 🌟 NEW: Placeholder for assigning devices to the current building/levels
+  onAssignDevicesButtonClicked(): void {
+    if (!this.selectedBuilding) return;
+    console.log(
+      "Opening modal to assign devices to building:",
+      this.selectedBuilding.name
+    );
+
+    // Implement modal logic here (e.g., this.modalService.show(AssignDevicesModalComponent))
+  }
+
+  // 🌟 NEW: Placeholder for editing a specific device's location
+  onEditDeviceLocation(): void {
+    if (!this.selectedBuilding) return;
+    console.log(
+      "Opening modal to select a device and edit its location on the map."
+    );
+
+    const modalRef = this.modalService.show(AssignLocationModalComponent, {
+      initialState: { building: this.selectedBuilding },
+      class: "modal-lg",
+    });
+  }
+
+  // 🌟 NEW: Placeholder for editing a specific device's location
+  openMapBoundaryModal(): void {
+    if (!this.selectedBuilding) return;
+    console.log(
+      "Opening modal to set map boundaries for:",
+      this.selectedBuilding.name
+    );
+
+    const modalRef = this.modalService.show(GPSComponent, {
+      initialState: { coordinates: this.selectedBuilding.coordinates } as any,
+      class: "modal-lg",
+    });
+
+    modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
+      console.log("Received new boundary config from modal:", newConfig);
+      this.onGpsConfigChange(newConfig);
+    });
   }
 
   private initConfiguration(): void {
@@ -156,7 +227,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
         zoomLevel: this.DEFAULT_ZOOM_LEVEL,
         rotationAngle: 10,
       },
-      coordinates: {},
+      coordinates: {}, // Initialize coordinates object
       legend: {
         title: "",
         thresholds: [],
@@ -175,18 +246,25 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
           return;
         }
 
-        this.selectedMapConfiguration = this.mapConfigurations.find(
+        this.selectedBuilding = this.mapConfigurations.find(
           (mapConfiguration) =>
             mapConfiguration.id === this.config.mapConfigurationId
         );
-        this.selectedMapConfigurationId = this.selectedMapConfiguration?.id;
+        this.selectedMapConfigurationId = this.selectedBuilding?.id;
         this.onMapConfigurationChanged();
       });
   }
 
   private updateDataPointSeries(): void {
+    // Only proceed if a building is selected
+    if (!this.selectedBuilding) {
+      this.dataPointSeries = [];
+      this.selectedDataPoint = undefined;
+      return;
+    }
+
     this.configService
-      .getSupportedSeriesFromMapConfiguration(this.selectedMapConfiguration!)
+      .getSupportedSeriesFromMapConfiguration(this.selectedBuilding)
       .then((datapoints) => {
         this.dataPointSeries = datapoints;
         if (!this.config || !this.config.measurement) {
@@ -222,27 +300,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     }
 
     this.config.datapointsPopup = this.config.datapointsPopup;
-  }
-
-  private displayAddThresholdModal(thresholdConfiguration?: Threshold) {
-    let config = {
-      backdrop: true,
-      ignoreBackdropClick: true,
-      keyboard: false,
-      ...(thresholdConfiguration
-        ? {
-            initialState: { threshold: thresholdConfiguration },
-          }
-        : {}),
-    };
-
-    const modalRef = this.modalService.show(AddThresholdModalComponent, config);
-    modalRef.content?.onSave$.subscribe((threshold: Threshold) => {
-      this.addThresholdToList(threshold);
-    });
-    modalRef.content?.onDelete$.subscribe((threshold: Threshold) => {
-      this.removeThresholdFromList(threshold);
-    });
   }
 
   private displayUpdateDatapointsPopupModal() {
@@ -298,7 +355,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onGpsConfigChange(newConfig: any): void {
-    console.log("Parent received new config:", newConfig);
+    console.log("Parent received new config (Boundaries):", newConfig);
+    // Update the widget config's coordinates property
     this.config.coordinates = newConfig;
     this.isSaved = false;
   }
