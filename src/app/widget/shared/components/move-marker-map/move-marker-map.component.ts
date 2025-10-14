@@ -1,158 +1,307 @@
-import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
-import { CoreModule } from '@c8y/ngx-components';
-import type * as L from 'leaflet';
-import { fromEvent, Subject, takeUntil } from 'rxjs';
-import { MarkerManagedObject } from '../../../data-point-indoor-map.model';
+import { CommonModule } from "@angular/common";
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  Input,
+  OnInit,
+  ViewChild,
+  ViewEncapsulation,
+  OnChanges,
+  SimpleChanges,
+  Output, // ⬅️ NEW
+  EventEmitter, // ⬅️ NEW
+} from "@angular/core";
+import { CoreModule } from "@c8y/ngx-components";
+import type * as L from "leaflet";
+import { MarkerManagedObject } from "../../../data-point-indoor-map.model";
+
+// Define the structure of the position data being emitted
+interface PositionData {
+    lat: number;
+    lng: number;
+}
 
 @Component({
-  selector: 'move-marker-map',
-  templateUrl: './move-marker-map.component.html',
-  styleUrls: ['./move-marker-map.component.less'],
+  selector: "move-marker-map",
+  templateUrl: "./move-marker-map.component.html",
+  styleUrls: ["./move-marker-map.component.less"],
   standalone: true,
   imports: [CoreModule, CommonModule],
+  encapsulation: ViewEncapsulation.None,
 })
-export class MoveMarkerMapComponent implements OnInit, OnChanges, AfterViewInit, OnDestroy {
-  private readonly MARKER_DEFAULT_COLOR = '#1776BF';
-
+export class MoveMarkerMapComponent
+  implements OnInit, AfterViewInit, OnChanges
+{
   leaf!: Promise<typeof L>;
   map?: L.Map;
-  private destroy$ = new Subject<void>();
-  private marker?: L.CircleMarker;
+  private imageLayer?: L.ImageOverlay;
+  private marker?: L.CircleMarker; 
 
   @Input() imageBlob?: Blob;
-  @Input() device?: MarkerManagedObject;
-  @Output() markerPosition = new EventEmitter<L.LatLng>();
+  @Input() item?: MarkerManagedObject;
+
+  @Input() topleftLat: number = 51.52;
+  @Input() topleftLng: number = -0.12;
+  @Input() bottomrightLat: number = 51.49;
+  @Input() bottomrightLng: number = -0.07;
+  @Input() zoomLevel: number = 13;
+  
+  // ⬅️ NEW: Emitter for position changes
+  @Output() positionChanged = new EventEmitter<PositionData>();
+
+  @ViewChild("markerMap", { read: ElementRef, static: true })
+  mapReference!: ElementRef;
 
   constructor() {}
 
   async ngOnInit() {
-    this.leaf = import('leaflet');
+    this.leaf = import("leaflet");
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    const deviceChanges = changes['device'];
-    const imageBlobChanges = changes['imageBlob'];
-    const isResused = (deviceChanges && !deviceChanges.isFirstChange()) || (imageBlobChanges && !imageBlobChanges.isFirstChange());
-    if (isResused) {
-      this.reload(!!imageBlobChanges);
+  async ngOnChanges(changes: SimpleChanges): Promise<void> {
+    await this.waitForMapInitialization();
+
+    if (changes["imageBlob"] && !changes["imageBlob"].firstChange) {
+      await this.updateImageOverlay();
+    }
+    
+    // Update marker position or existence when the item changes
+    if (changes["item"] || (this.map && this.marker)) {
+        await this.updateMarkerPosition(changes);
     }
   }
 
   async ngAfterViewInit() {
     const l = await this.leaf;
-    if (!this.imageBlob) {
-      return;
-    }
+    const map = l.map(this.mapReference.nativeElement, {});
+    this.map = map;
 
-    const {
-      url,
-      dimensions: { width, height },
-    } = await this.readImage(this.imageBlob);
+    // Setup Tile Layer
+    l.Control.Attribution.prototype.options.prefix = false;
+    l.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
 
-    this.map = l.map('map', {
-      crs: l.CRS.Simple,
-      minZoom: -2,
-      maxZoom: 1,
-      center: [height * 0.5, width * 0.5],
-      zoom: 0,
+    await this.updateImageOverlay();
+
+    // Map centering and fitBounds
+    const center = this.getCenterCoordinates({
+      topLeftLat: this.topleftLat,
+      topLeftLng: this.topleftLng,
+      bottomRightLat: this.bottomrightLat,
+      bottomRightLng: this.bottomrightLng,
     });
 
-    this.addImageToMap(url, width, height, l);
+    const bounds = l.latLngBounds(
+      [this.topleftLat, this.topleftLng],
+      [this.bottomrightLat, this.bottomrightLng]
+    );
 
-    fromEvent<L.LeafletMouseEvent>(this.map, 'click')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((e) => this.onClick(e, l));
+    map.setView(center, this.zoomLevel);
+    map.fitBounds(bounds); // Initial fit to the floor bounds
 
-    if (this.device?.c8y_IndoorPosition) {
-      const { lat, lng } = this.device.c8y_IndoorPosition;
-      const latlng: L.LatLng = l.latLng(lat, lng);
-      this.updateMarkerPosition(latlng, l);
+    // Setup marker and click listener
+    this.setupMarkerAndClickListener(l, map);
+
+    // Initial map size fix
+    this.redrawMap(true);
+  }
+
+  /**
+   * Initializes the CircleMarker and sets up the map click listener.
+   */
+  private setupMarkerAndClickListener(l: typeof L, map: L.Map): void {
+    
+    // 1. Initial Marker Setup: ONLY create marker if position exists
+    if (this.hasValidPosition()) {
+        const initialPosition = this.getMarkerInitialPosition(l);
+        this.marker = l.circleMarker(initialPosition, {
+            radius: 8,
+            color: '#0056b3',
+            fillColor: '#3498db',
+            fillOpacity: 0.8,
+            interactive: false,
+        }).addTo(map);
+    }
+    
+    // 2. Add Map Click Listener (This listener handles marker creation/repositioning)
+    map.on('click', (event: L.LeafletMouseEvent) => {
+        const newPosition = event.latlng;
+        
+        // If marker doesn't exist, create it at the click location
+        if (!this.marker) {
+            this.marker = l.circleMarker(newPosition, {
+                radius: 8,
+                color: '#0056b3',
+                fillColor: '#3498db',
+                fillOpacity: 0.8,
+                interactive: false,
+            }).addTo(map);
+        } else {
+            // If marker exists, reposition it
+            this.marker.setLatLng(newPosition);
+        }
+
+        // 3. Update the item's c8y_Position immediately (by reference)
+        this.updateItemPosition(newPosition.lat, newPosition.lng);
+        
+        // ⬅️ 4. EMIT THE CHANGE to notify the parent
+        this.positionChanged.emit({ lat: newPosition.lat, lng: newPosition.lng });
+    });
+  }
+
+  /**
+   * Checks if the item has valid c8y_Position coordinates.
+   */
+  private hasValidPosition(): boolean {
+      const pos = this.item?.c8y_Position;
+      return !!pos && pos.lat !== undefined && pos.lng !== undefined;
+  }
+  
+  /**
+   * Updates the position data on the item input object.
+   */
+  private updateItemPosition(lat: number, lng: number): void {
+    if (this.item) {
+        if (!this.item.c8y_Position) {
+            this.item.c8y_Position = { lat: lat, lng: lng };
+        } else {
+            this.item.c8y_Position.lat = lat;
+            this.item.c8y_Position.lng = lng;
+        }
     }
   }
 
-  private async reload(reloadImage: boolean) {
-    const map = this.map!;
 
-    if (reloadImage) {
-      map.eachLayer((layer) => {
-        layer.removeFrom(map);
-      });
-    } else if (this.marker) {
-      this.marker.removeFrom(map);
+  public redrawMap(initialDelay: boolean = false): void {
+    if (!this.map) {
+      setTimeout(() => this.redrawMap(initialDelay), 100);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const delay = initialDelay ? 300 : 50;
+      setTimeout(() => {
+        if (this.map) {
+          this.map.invalidateSize(true);
+        }
+      }, delay);
+    });
+  }
+
+  private async updateImageOverlay(): Promise<void> {
+    if (
+      !this.map ||
+      !this.topleftLat ||
+      !this.topleftLng ||
+      !this.bottomrightLat ||
+      !this.bottomrightLng
+    ) {
+      return;
     }
 
     const l = await this.leaf;
 
-    if (reloadImage && this.imageBlob) {
-      const {
-        dimensions: { width, height },
-      } = await this.readImage(this.imageBlob!);
-
-      const bounds = l.latLngBounds([0, 0], [height, width]);
-      map.setMaxBounds(bounds);
-
-      const imgBlobURL = URL.createObjectURL(this.imageBlob!);
-      l.imageOverlay(imgBlobURL, bounds, {
-        opacity: 1,
-        interactive: false,
-        zIndex: -1000,
-      }).addTo(map);
-      const point = l.latLng(height * 0.5, width * 0.5);
-      map.setView(point, 0, { animate: true });
+    if (this.imageLayer) {
+      this.map.removeLayer(this.imageLayer);
+      const src = this.imageLayer.getElement()?.src;
+      if (src) {
+        URL.revokeObjectURL(src);
+      }
+      this.imageLayer = undefined;
     }
 
-    if (this.device?.c8y_IndoorPosition) {
-      const { lat, lng } = this.device.c8y_IndoorPosition;
-      const latlng: L.LatLng = l.latLng(lat, lng);
-      this.updateMarkerPosition(latlng, l);
+    if (this.imageBlob) {
+      const bounds = l.latLngBounds(
+        [this.topleftLat, this.topleftLng],
+        [this.bottomrightLat, this.bottomrightLng]
+      );
+      const imgBlobURL = URL.createObjectURL(this.imageBlob);
+
+      this.imageLayer = l
+        .imageOverlay(imgBlobURL, bounds, {
+          opacity: 1,
+          interactive: true,
+        })
+        .addTo(this.map);
+
+      this.map.fitBounds(bounds);
     }
   }
 
-  private async readImage(blob: Blob) {
-    const url = URL.createObjectURL(blob);
-    const bmp = await createImageBitmap(blob);
-    const { width, height } = bmp;
-    bmp.close(); // free memory
-    return { url, dimensions: { width, height } };
+  private async waitForMapInitialization(): Promise<void> {
+    if (this.map) return Promise.resolve();
+    await this.leaf;
+
+    return new Promise((resolve) => {
+      const interval = setInterval(() => {
+        if (this.map) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 50);
+    });
   }
 
-  private addImageToMap(url: string, width: number, height: number, l: typeof L) {
-    const bounds: L.LatLngBoundsExpression = [
-      [0, 0],
-      [height, width],
-    ];
-    const image = l.imageOverlay(url, bounds);
-    image.addTo(this.map!);
-    this.map!.fitBounds(bounds);
-  }
+  private async updateMarkerPosition(changes: SimpleChanges): Promise<void> {
+    if (!this.map) return;
 
-  private onClick(e: L.LeafletMouseEvent, l: typeof L) {
-    this.updateMarkerPosition(e.latlng, l);
-    this.markerPosition.emit(e.latlng);
-  }
+    const l = await this.leaf;
+    const hasPosition = this.hasValidPosition();
 
-  private updateMarkerPosition(latlng: L.LatLng, l: typeof L) {
-    if (this.marker) {
-      this.marker.removeFrom(this.map!);
+    // 1. Handle Removal: If position is invalid, remove the marker
+    if (!hasPosition) {
+        if (this.marker) {
+            this.map.removeLayer(this.marker);
+            this.marker = undefined;
+        }
+        return;
     }
-    this.marker = l
-      .circleMarker(latlng, {
-        fillColor: this.MARKER_DEFAULT_COLOR,
-        fillOpacity: 0.75,
-        radius: 8,
-        weight: 0,
-        interactive: false,
-      })
-      .addTo(this.map!);
+    
+    // --- Position is valid (hasPosition === true) ---
+    
+    const newPosition = this.getMarkerInitialPosition(l);
+
+    // 2. Handle Creation: If position is valid but marker doesn't exist
+    if (!this.marker) {
+        this.marker = l.circleMarker(newPosition, {
+            radius: 8,
+            color: '#0056b3',
+            fillColor: '#3498db',
+            fillOpacity: 0.8,
+            interactive: false,
+        }).addTo(this.map);
+    } 
+    // 3. Handle Movement: If both exist, move the marker
+    else {
+        this.marker.setLatLng(newPosition);
+    }
+    
+    // We explicitly avoid calling map.setView() here to keep the view on the floor bounds.
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    try {
-      this.map?.clearAllEventListeners();
-    } catch (e) {
-      console.warn(e);
+  private getMarkerInitialPosition(l: typeof L): L.LatLngExpression {
+    const itemPosition = this.item?.c8y_Position; 
+    
+    if (this.hasValidPosition()) {
+      return [itemPosition!.lat, itemPosition!.lng];
+    } 
+    return [0, 0]; 
+  }
+
+  getCenterCoordinates(coordinates: any): [number, number] {
+    if (coordinates) {
+      const centerLat =
+        (coordinates.topLeftLat + coordinates.bottomRightLat) / 2;
+      const centerLng =
+        (coordinates.topLeftLng + coordinates.bottomRightLng) / 2;
+      return [centerLat, centerLng];
+    } else {
+      return [51.23544, 6.79599];
     }
   }
 }
+

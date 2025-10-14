@@ -1,6 +1,8 @@
+<div class="legend form-block">Building Configuration</div>
+
 <div class="input-group m-b-24">
   <c8y-form-group class="m-b-16">
-    <label>Map Configuration</label>
+    <label>Building/Map Selection</label>
     <div class="c8y-select-wrapper">
       <select
         name="map-configuration"
@@ -8,6 +10,12 @@
         [(ngModel)]="selectedMapConfigurationId"
         (ngModelChange)="onMapConfigurationChanged()"
       >
+        <option
+          *ngIf="!mapConfigurations || mapConfigurations.length === 0"
+          value=""
+        >
+          No configurations available
+        </option>
         <option
           *ngFor="let config of mapConfigurations"
           value="{{ config.id }}"
@@ -32,8 +40,8 @@
       *ngIf="selectedMapConfigurationId"
       type="button"
       class="btn btn-dot"
-      title="Edit configuration"
-      aria-label="Edit configuration"
+      title="Edit Map Configuration (Image/Bounds)"
+      aria-label="Edit Map Configuration (Image/Bounds)"
       (click)="onEditMapConfiguration()"
     >
       <i c8yIcon="pencil" class="c8y-icon"></i>
@@ -41,97 +49,85 @@
     <button
       *ngIf="selectedMapConfigurationId"
       type="button"
-      class="btn btn-dot btn-dot--danger"
+      class="btn btn-dot text-danger"
       title="Delete configuration"
       aria-label="Delete configuration"
       (click)="onDeleteMapConfiguration()"
     >
-      <i c8yIcon="minus-circle" class="c8y-icon"></i>
+      <i c8yIcon="trash" class="c8y-icon"></i>
     </button>
   </div>
 </div>
 
-<!-- <c8y-form-group>
-  <label>Primary Measurement</label>
-  <div class="c8y-select-wrapper">
-    <select name="map-configuration" placeholder="Select Primary Measurement" [(ngModel)]="selectedDataPoint" [disabled]="!selectedMapConfiguration" (ngModelChange)="onPrimaryMeasurementChanged()">
-      <option *ngFor="let dp of dataPointSeries" [title]="dp">{{ dp }}</option>
-    </select>
+<hr />
+
+<div *ngIf="selectedBuilding">
+  <div class="legend form-block">Map Settings</div>
+
+  <div class="form-group">
+    <label for="buildingName">Building Name</label>
+    <input
+      type="text"
+      class="form-control"
+      [(ngModel)]="selectedBuilding.name"
+      placeholder="Enter Building Name"
+    />
   </div>
-</c8y-form-group> -->
-<div class="legend form-block">Map Settings</div>
-<c8y-form-group>
-  <label>Zoom level</label>
-  <input
-    type="number"
-    class="form-control"
-    [(ngModel)]="config.mapSettings.zoomLevel"
-    step="0.25"
-  />
-</c8y-form-group>
 
-<!-- <c8y-form-group>
-  <c8y-gps-component
-    (configChange)="onGpsConfigChange($event)"
-  ></c8y-gps-component>
-</c8y-form-group> -->
-<c8y-form-group>
-  <c8y-gps-component
-    [initialConfig]="config.coordinates ?? {}"
-    (configChange)="onGpsConfigChange($event)"
-  ></c8y-gps-component>
-</c8y-form-group>
+  <c8y-form-group>
+    <label>Initial Zoom Level</label>
+    <input
+      type="number"
+      class="form-control"
+      [(ngModel)]="config.mapSettings.zoomLevel"
+      step="0.25"
+      placeholder="e.g., 14"
+    />
+  </c8y-form-group>
 
-<!-- <div class="legend form-block">Legend</div>
-<c8y-form-group>
-  <label>Title</label>
-  <input type="text" class="form-control" placeholder="Title" [(ngModel)]="config.legend.title" />
-</c8y-form-group> -->
-<!-- <c8y-form-group cdkDropList [cdkDropListData]="config.legend.thresholds" (cdkDropListDropped)="onDrop($event)">
-  <label>Marker Color Configuration</label>
-  <p class="small">In case of mixing event and measurement thresholds, the order of this list will be taken into account (first wins).</p>
-  <div class="threshold-list m-b-4">
-    <div *ngFor="let threshold of config.legend.thresholds" cdkDrag style="width: 50%" class="m-b-4 p-4 d-flex threshold-item" style="justify-content: space-between">
-      <div class="drag-handle m-4" cdkDragHandle>
-        <i c8yIcon="drag-reorder"></i>
-      </div>
+  <hr />
 
-      <div class="threshold-text-item m-4" *ngIf="threshold.type === 'measurement'">
-        <i [style.background]="threshold.color" class="m-4"></i><span> {{ threshold.label + ' (min: ' + threshold.min + ', max: ' + threshold.max + ')' }}</span>
-      </div>
-      <div class="threshold-text-item m-4" *ngIf="threshold.type === 'event'">
-        <i [style.background]="threshold.color" class="m-4"></i><span> {{ threshold.label + ' (text: ' + threshold.text + ', type: ' + threshold.eventType + ')' }}</span>
-      </div>
+  <div class="legend form-block">Map Boundaries</div>
 
-      <div class="input-group-btn">
-        <button type="button" title="Edit threshold" aria-label="Edit threshold" class="btn btn-dot" (click)="onThresholdClicked(threshold)">
-          <i c8yicon="pencil" class="c8y-icon dlt-c8y-icon-pencil"></i>
-        </button>
-      </div>
-    </div>
-  </div>
-  <button type="button" style="width: 50%" class="btn btn-default btn btn-block" (click)="onAddThresholdButtonClicked()">Add Threshold</button>
-</c8y-form-group> -->
-<!-- <div class="legend form-block">Marker</div>
-<c8y-form-group>
-  <label>Popup - Preview</label>
-  <div style="margin: 10px 0px">
-    <div class="leaflet-popup indoor-map-popup indoor-map-configuration-popup leaflet-zoom-animated">
-      <div class="leaflet-popup-content-wrapper">
-        <div class="leaflet-popup-content">
-          <h5>Device Name</h5>
-          <div *ngIf="!!config.datapointsPopup && config.datapointsPopup.length > 0">
-            <p *ngFor="let datapoint of config.datapointsPopup">{{ datapoint.label }} : 0</p>
-          </div>
-          <div *ngIf="!config.datapointsPopup || config.datapointsPopup.length === 0">
-            <p>No datapoints selected</p>
-          </div>
-        </div>
-      </div>
-      <div class="leaflet-popup-tip-container">
-        <div class="leaflet-popup-tip"></div>
-      </div>
-    </div>
-  </div>
-  <button type="button" style="width: 50%" class="btn btn-default btn btn-block" (click)="onUpdateDatapointsButtonClicked()">Update Datapoints</button>
-</c8y-form-group> -->
+  <c8y-form-group>
+    <label>Map Boundaries</label>
+    <p class="small">Draw a rectangle on the map to define the image bounds.</p>
+    <button
+      type="button"
+      class="btn btn-default btn-block"
+      (click)="openMapBoundaryModal()"
+    >
+      <i c8yIcon="devices" class="c8y-icon"></i> Draw Map Boundaries
+    </button>
+  </c8y-form-group>
+
+  <hr />
+
+  <div class="legend form-block">Device Location Assignment</div>
+
+  <c8y-form-group>
+    <label>Associate Devices</label>
+    <p class="small">Link physical devices to this map's levels.</p>
+    <button
+      type="button"
+      class="btn btn-default btn-block"
+      (click)="onAssignDevicesButtonClicked()"
+    >
+      <i c8yIcon="devices" class="c8y-icon"></i> Assign Devices to Floors
+    </button>
+  </c8y-form-group>
+
+  <c8y-form-group>
+    <label>Edit Device Locations</label>
+    <p class="small">
+      Select a device and set its exact position on the map image.
+    </p>
+    <button
+      type="button"
+      class="btn btn-default btn-block"
+      (click)="onEditDeviceLocation()"
+    >
+      <i c8yIcon="map-marker" class="c8y-icon"></i> Edit Device Location
+    </button>
+  </c8y-form-group>
+</div>

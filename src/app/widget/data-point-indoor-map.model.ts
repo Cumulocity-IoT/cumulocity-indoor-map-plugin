@@ -96,7 +96,7 @@ export interface MapConfigurationLevel {
 }
 
 export interface MarkerManagedObject extends IManagedObject {
-  c8y_IndoorPosition?: {
+  c8y_Position?: {
     lat: number;
     lng: number;
   };
