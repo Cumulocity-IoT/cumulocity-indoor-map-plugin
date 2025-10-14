@@ -11,9 +11,8 @@ import {
   EventEmitter,
   Output,
 } from "@angular/core";
-
 import * as L from "leaflet";
-import "leaflet-draw";
+import "@geoman-io/leaflet-geoman-free";
 import { GPSCoordinates } from "../../data-point-indoor-map.model";
 
 @Component({
@@ -30,6 +29,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     bottomRightLat: 0,
     bottomRightLng: 0,
   };
+  // NOTE: Assuming your initialConfig model now includes a polygonVerticesJson property
   @Output() configChange = new EventEmitter<any>();
 
   private map: L.Map | undefined;
@@ -71,10 +71,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     }
 
-    if (this.initialConfig.polygonVerticesJson) {
+    if ((this.initialConfig as any).polygonVerticesJson) {
       try {
         const savedVertices = JSON.parse(
-          this.initialConfig.polygonVerticesJson
+          (this.initialConfig as any).polygonVerticesJson
         );
         // Convert plain object array back to L.LatLng objects
         const latLngs = savedVertices.map((ring: any[]) =>
@@ -109,7 +109,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
 
-    this.initDrawControl();
+    this.initGeomanControl();
   }
 
   private drawSavedBoundary(bounds: {
@@ -133,10 +133,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       });
       leafletBounds = (layerToDraw as L.Polygon).getBounds();
     } else if (bounds.tl.lat !== 0) {
-      leafletBounds = L.latLngBounds(
-        L.latLng(bounds.tl.lat, bounds.tl.lng),
-        L.latLng(bounds.br.lat, bounds.br.lng)
-      );
+      // NOTE: L.rectangle expects SW and NE, which corresponds to TL/BR for the bounding box.
+      const southWest = L.latLng(bounds.br.lat, bounds.tl.lng);
+      const northEast = L.latLng(bounds.tl.lat, bounds.br.lng);
+      leafletBounds = L.latLngBounds(southWest, northEast);
 
       layerToDraw = L.rectangle(leafletBounds, {
         color: "#ff0000",
@@ -152,6 +152,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.map.fitBounds(leafletBounds);
     }
   }
+
   private updateImageBoundsFromLeaflet(bounds: L.LatLngBounds): void {
     const tl = bounds.getNorthWest(); // Top-Left (North-West)
     const br = bounds.getSouthEast(); // Bottom-Right (South-East)
@@ -164,21 +165,91 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     this.polygonVertices.set(null);
   }
 
-  private emitConfigChange(bounds: {
+  private initGeomanControl(): void {
+    if (!this.map) return;
+    const mapWithPm = this.map as any;
+    this.featureGroup = new L.FeatureGroup();
+    this.map.addLayer(this.featureGroup);
+    /*  if (typeof L.PM !== "undefined" && !mapWithPm.pm) {
+      // This is a cleaner way to force the initialization hook without MapManager:
+      mapWithPm.pm.enable(null);
+    } */
+
+    mapWithPm.pm.addControls({
+      position: "topleft",
+      drawMarker: false,
+      drawCircleMarker: false,
+      drawPolyline: false,
+      drawCircle: false,
+      drawRectangle: true,
+      drawPolygon: true,
+
+      editMode: true,
+      dragMode: true,
+      cutPolygon: false,
+      deleteMode: true,
+      rotateMode: false, // Enable rotation control
+      allowSelfIntersection: false,
+
+      // Target the layers in the featureGroup for editing
+      edit: {
+        featureGroup: this.featureGroup,
+      },
+    });
+
+    mapWithPm.on("pm:create", (e: any) => {
+      const type = e.shape;
+      const layer = e.layer;
+
+      this.featureGroup?.clearLayers();
+      this.featureGroup?.addLayer(layer);
+
+      if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
+        this.updateImageBoundsFromLeaflet(layer.getBounds());
+      }
+
+      if (type === "Polygon") {
+        this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
+      } else if (type === "Rectangle") {
+        this.polygonVertices.set(null);
+      }
+
+      layer.pm.enable({ allowSelfIntersection: false });
+    });
+
+    mapWithPm.on("pm:edit", (e: any) => {
+      e.layers.each((layer: any) => {
+        if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
+          this.updateImageBoundsFromLeaflet(layer.getBounds());
+        }
+        if (layer instanceof L.Polygon) {
+          this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
+        } else {
+          this.polygonVertices.set(null);
+        }
+      });
+    });
+    // Draw existing boundary if any
+    const initialBounds = this.imageBounds();
+    if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
+      this.drawSavedBoundary(initialBounds);
+    }
+  }
+
+  private mapToConfig(bounds: {
     tl: { lat: number; lng: number };
     br: { lat: number; lng: number };
-  }): void {
+  }): any {
     const vertices = this.polygonVertices();
     let polygonVerticesJson: string | undefined = undefined;
 
     if (vertices) {
-      // Serialize L.LatLng objects to a JSON string for storage
       polygonVerticesJson = JSON.stringify(
         vertices.map((ring) => ring.map((v) => ({ lat: v.lat, lng: v.lng })))
       );
     }
 
-    const config = {
+    return {
       placementMode: vertices ? "polygon" : "corners",
       topLeftLat: bounds.tl.lat,
       topLeftLng: bounds.tl.lng,
@@ -186,96 +257,22 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       bottomRightLng: bounds.br.lng,
       polygonVerticesJson: polygonVerticesJson,
     };
-    this.configChange.emit(config);
   }
 
-  private initDrawControl(): void {
-    if (!this.map) return;
-
-    this.featureGroup = new L.FeatureGroup();
-    this.map.addLayer(this.featureGroup);
-
-    const drawControl = new (L.Control as any).Draw({
-      edit: {
-        featureGroup: this.featureGroup,
-      },
-      draw: {
-        polyline: false,
-        marker: false,
-        circlemarker: false,
-        circle: false,
-
-        rectangle: {
-          shapeOptions: {
-            color: "#ff0000",
-          },
-        },
-        polygon: {
-          shapeOptions: {
-            color: "#ff0000",
-          },
-        },
-      },
-    });
-
-    this.map.addControl(drawControl);
-
-    // Listen for the 'draw:created' event
-    this.map.on((L.Draw as any).Event.CREATED, (e: any) => {
-      const type = e.layerType;
-      const layer = e.layer;
-      this.featureGroup?.clearLayers();
-
-      this.featureGroup?.addLayer(layer);
-
-      if (
-        layer instanceof L.Rectangle ||
-        layer instanceof L.Polygon ||
-        layer instanceof L.Circle
-      ) {
-        this.updateImageBoundsFromLeaflet(layer.getBounds());
-      }
-      if (type === "polygon") {
-        const latLngs = layer.getLatLngs();
-
-        if (latLngs.length > 0 && latLngs[0] instanceof L.LatLng) {
-          this.polygonVertices.set([latLngs as L.LatLng[]]);
-        } else {
-          this.polygonVertices.set(latLngs as L.LatLng[][]);
-        }
-      } else if (type === "rectangle") {
-        this.polygonVertices.set(null);
-      }
-    });
-
-    this.map.on((L.Draw as any).Event.EDITED, (e: any) => {
-      e.layers.each((layer: any) => {
-        if (
-          layer instanceof L.Rectangle ||
-          layer instanceof L.Polygon ||
-          layer instanceof L.Circle
-        ) {
-          const bounds = layer.getBounds();
-          this.updateImageBoundsFromLeaflet(bounds);
-        }
-
-        if (layer instanceof L.Polygon) {
-          const latLngs = layer.getLatLngs();
-
-          if (latLngs.length > 0 && latLngs[0] instanceof L.LatLng) {
-            this.polygonVertices.set([latLngs as L.LatLng[]]);
-          } else {
-            this.polygonVertices.set(latLngs as L.LatLng[][]);
-          }
-        } else {
-          this.polygonVertices.set(null);
-        }
-      });
-    });
+  private emitConfigChange(payload: any): void {
+    const finalConfig = {
+      ...this.mapToConfig(this.imageBounds()),
+      ...payload,
+      rotationAngle:
+        payload.rotationAngle || this.initialConfig.rotationAngle || 0,
+    };
+    this.configChange.emit(finalConfig);
   }
 
   ngOnDestroy(): void {
     if (this.map) {
+      // Clean up Geoman controls and map layers
+      (this.map as any).pm.removeControls();
       this.map.off();
       this.map.remove();
     }

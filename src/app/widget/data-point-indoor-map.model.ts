@@ -22,6 +22,7 @@ export interface WidgetConfiguration {
   measurement: Datapoint;
   mapSettings: {
     zoomLevel: number;
+    rotationAngle: number;
   };
   legend?: {
     title: string;
@@ -73,6 +74,7 @@ export interface GPSCoordinates {
   bottomRightLng?: number;
   polygonVerticesJson?: string;
   placementMode?: string;
+  rotationAngle?: number;
 }
 
 export function isMapConfigutaration(obj: any): obj is MapConfiguration {

@@ -1,20 +1,3 @@
-/**
- * Copyright (c) 2022 Software AG, Darmstadt, Germany and/or its licensors
- *
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 import {
   AfterViewInit,
   Component,
@@ -385,60 +368,6 @@ export class DataPointIndoorMapComponent
 
   private calculateBounds(): L.LatLngBounds | null {
     if (!!this.config.coordinates) {
-      /*  if (this.config.coordinates.placementMode === "dimensions") {
-        const {
-          anchorLat,
-          anchorLng,
-          width,
-          height,
-          scaleX,
-          scaleY,
-          offsetX,
-          offsetY,
-        } = this.config.coordinates;
-
-        if (
-          anchorLat == null ||
-          anchorLng == null ||
-          width == null ||
-          height == null
-        ) {
-          console.error(
-            "Dimension parameters are missing from the configuration."
-          );
-          return null;
-        }
-
-        // Use default values for optional scale and offset
-        const scaleXVal = scaleX ?? 1;
-        const scaleYVal = scaleY ?? 1;
-        const offsetXVal = offsetX ?? 0;
-        const offsetYVal = offsetY ?? 0;
-
-        const scaledWidth = width * scaleXVal;
-        const scaledHeight = height * scaleYVal;
-
-        const latPerMeter = 1 / 111132;
-        const lngPerMeter =
-          1 / (111320 * Math.cos((anchorLat * Math.PI) / 180));
-
-        const latOffset = offsetYVal * latPerMeter;
-        const lngOffset = offsetXVal * lngPerMeter;
-
-        const heightInLat = scaledHeight * latPerMeter;
-        const widthInLng = scaledWidth * lngPerMeter;
-
-        const topLeft = this.leaf.latLng(
-          parseFloat(anchorLat.toString()) + latOffset,
-          parseFloat(anchorLng.toString()) + lngOffset
-        );
-        const bottomRight = this.leaf.latLng(
-          topLeft.lat - heightInLat,
-          topLeft.lng + widthInLng
-        );
-
-        return this.leaf.latLngBounds(topLeft, bottomRight);
-      } else { */
       const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
         this.config.coordinates;
 
@@ -457,6 +386,76 @@ export class DataPointIndoorMapComponent
     return null;
   }
 
+  private createRotatedImageOverlay(
+    url: string,
+    bounds: L.LatLngBoundsExpression,
+    rotationAngle: number,
+    options?: L.ImageOverlayOptions
+  ): L.ImageOverlay {
+    const L_ImageOverlay = this.leaf.ImageOverlay;
+    const RotatedOverlay = (L_ImageOverlay as any).extend({
+      initialize: function (
+        url: string,
+        bounds: L.LatLngBoundsExpression,
+        options: any
+      ) {
+        options = options || {};
+        options.rotation = rotationAngle;
+        (L_ImageOverlay.prototype as any).initialize.call(
+          this,
+          url,
+          bounds,
+          options
+        );
+      },
+
+      _updateImage: function () {
+        (L_ImageOverlay.prototype as any)._updateImage.call(this);
+
+        if (this._image && this.options.rotation !== 0) {
+          const angle = this.options.rotation;
+          const existingTransform = this._image.style.transform || "";
+          this._image.style.transformOrigin = "center";
+          this._image.style.transform = `${existingTransform} rotate(${angle}deg)`;
+        }
+      },
+    });
+
+    return new RotatedOverlay(url, bounds, options) as L.ImageOverlay;
+  }
+  private placeImageAndBounds(
+    map: L.Map,
+    bounds: L.LatLngBounds,
+    imgBlobURL: string
+  ): void {
+    const rotationAngle = this.config.mapSettings?.rotationAngle ?? 0;
+    const imageOverlay = this.createRotatedImageOverlay(
+      imgBlobURL,
+      bounds,
+      rotationAngle,
+      {
+        opacity: 1,
+        interactive: true,
+      } as any
+    );
+
+    imageOverlay.addTo(map);
+
+    const zoom = this.config.mapSettings.zoomLevel;
+    const center = this.getCenterCoordinates(this.config.coordinates);
+
+    map.setView(center, zoom);
+    map.fitBounds(bounds);
+
+    // Add event listeners for zoom and drag
+    fromEvent<L.LeafletEvent>(map, "zoomend")
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.onZoomEnd());
+
+    fromEvent<L.LeafletEvent>(map, "dragend")
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.onDragEnd());
+  }
   private initMap(building: MapConfiguration, level: number): L.Map {
     const currentMapConfigurationLevel = building.levels[level];
 
@@ -472,6 +471,7 @@ export class DataPointIndoorMapComponent
 
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 20,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -479,26 +479,9 @@ export class DataPointIndoorMapComponent
 
     if (currentMapConfigurationLevel.blob) {
       const imgBlobURL = URL.createObjectURL(currentMapConfigurationLevel.blob);
-      this.leaf
-        .imageOverlay(imgBlobURL, bounds, {
-          opacity: 1,
-          interactive: true,
-        })
-        .addTo(map);
 
-      const zoom = this.config.mapSettings.zoomLevel;
-      const center = this.getCenterCoordinates(this.config.coordinates);
-
-      map.setView(center, zoom);
-      map.fitBounds(bounds);
-
-      fromEvent<L.LeafletEvent>(map, "zoomend")
-        .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.onZoomEnd());
-
-      fromEvent<L.LeafletEvent>(map, "dragend")
-        .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.onDragEnd());
+      // 🚩 USE NEW HELPER 🚩
+      this.placeImageAndBounds(map, bounds, imgBlobURL);
     }
 
     return map;
@@ -527,18 +510,7 @@ export class DataPointIndoorMapComponent
       console.log(centerLat, centerLng);
 
       return [centerLat, centerLng];
-    } /* else if (coordinates?.placementMode === "dimensions") {
-      const centerLat =
-        coordinates.anchorLat +
-        coordinates.offsetY +
-        (coordinates.height / 2) * coordinates.scaleY;
-      const centerLng =
-        coordinates.anchorLng +
-        coordinates.offsetX +
-        (coordinates.width / 2) * coordinates.scaleX;
-      console.log(centerLat, centerLng);
-      return [centerLat, centerLng];
-    } */ else {
+    } else {
       return [51.23544, 6.79599];
     }
   }
@@ -553,6 +525,7 @@ export class DataPointIndoorMapComponent
     // Add the base tile layer
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 20,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -561,40 +534,14 @@ export class DataPointIndoorMapComponent
     // Fetch the bounds using the shared calculateBounds function
     const bounds = this.calculateBounds();
 
-    // If no valid bounds are returned, return early
     if (!bounds) {
       return;
     }
 
-    /*  const map = this.leaf.map(this.mapReference.nativeElement, {
-      minZoom: 0,
-      maxZoom: 18,
-      zoomSnap: 0.25,
-      zoomDelta: 0.25,
-    }); */
-
     if (level.blob) {
       const imgBlobURL = URL.createObjectURL(level.blob);
-      const imageOverlay = this.leaf.imageOverlay(imgBlobURL, bounds, {
-        opacity: 1,
-        interactive: true,
-      });
-      imageOverlay.addTo(map);
 
-      const zoom = this.config.mapSettings.zoomLevel;
-      const center = this.getCenterCoordinates(this.config.coordinates);
-
-      map.setView(center, zoom);
-      map.fitBounds(imageOverlay.getBounds());
-
-      // Add event listeners for zoom and drag
-      fromEvent<L.LeafletEvent>(map, "zoomend")
-        .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.onZoomEnd());
-
-      fromEvent<L.LeafletEvent>(map, "dragend")
-        .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.onDragEnd());
+      this.placeImageAndBounds(map, bounds, imgBlobURL);
     }
   }
   /**
