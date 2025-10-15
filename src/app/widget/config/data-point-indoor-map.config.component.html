@@ -91,7 +91,9 @@
 
   <c8y-form-group>
     <label>Map Boundaries</label>
-    <p class="small">Draw a rectangle on the map to define the image bounds.</p>
+    <p class="small">
+      Draw a rectangle/polygon on the map to define the image bounds.
+    </p>
     <button
       type="button"
       class="btn btn-default btn-block"
@@ -128,6 +130,18 @@
       (click)="onEditDeviceLocation()"
     >
       <i c8yIcon="map-marker" class="c8y-icon"></i> Edit Device Location
+    </button>
+  </c8y-form-group>
+
+  <c8y-form-group>
+    <label>Create/Edit zones</label>
+    <p class="small">Create/edit the zones on floor</p>
+    <button
+      type="button"
+      class="btn btn-default btn-block"
+      (click)="onZoneCreation()"
+    >
+      <i c8yIcon="map-marker" class="c8y-icon"></i>Create/edit zones
     </button>
   </c8y-form-group>
 </div>

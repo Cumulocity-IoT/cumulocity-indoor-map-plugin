@@ -32,8 +32,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     bottomRightLat: 0,
     bottomRightLng: 0,
   };
-  // NOTE: Assuming your initialConfig model now includes a polygonVerticesJson property
-  @Output() configChange = new EventEmitter<any>();
+
   @Output() boundaryChange = new EventEmitter<GPSCoordinates>();
 
   @ViewChild("boundaryMap", { read: ElementRef, static: true })
@@ -102,17 +101,31 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.initMap();
 
-    // 🌟 FIX 2: Force redraw after modal transition to correct container size
     if (this.map) {
       setTimeout(() => {
         this.map!.invalidateSize();
+
+        // Optionally center the map on the loaded boundary if one exists
+        const initialBounds = this.imageBounds();
+        if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
+          // We can fit the bounds here after the map size is correct
+          const southWest = L.latLng(
+            initialBounds.br.lat,
+            initialBounds.tl.lng
+          );
+          const northEast = L.latLng(
+            initialBounds.tl.lat,
+            initialBounds.br.lng
+          );
+          this.map!.fitBounds(L.latLngBounds(southWest, northEast));
+        }
+
         console.log("Map size invalidated for modal rendering.");
-      }, 300); // 300ms delay is usually safe for modals
+      }, 300); // A 300ms delay is typically safe for most modal animations
     }
   }
-
   private initMap(): void {
-    // 🌟 FIX 1: Initialize map using the ElementRef's native element, not a hardcoded ID
+    // Basic map setup
     this.map = L.map(this.mapReference.nativeElement, {
       center: [52.52, 13.4],
       zoom: 15,
@@ -281,7 +294,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       rotationAngle:
         payload.rotationAngle || this.initialConfig.rotationAngle || 0,
     };
-    this.configChange.emit(finalConfig);
+    this.boundaryChange.emit(finalConfig);
   }
 
   ngOnDestroy(): void {

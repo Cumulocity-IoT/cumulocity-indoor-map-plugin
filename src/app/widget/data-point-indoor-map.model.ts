@@ -103,3 +103,8 @@ export interface MarkerManagedObject extends IManagedObject {
     lng: number;
   };
 }
+
+export interface GPSConfigWithImage extends GPSCoordinates {
+  imageUrl?: string;
+  rotationAngle?: number;
+}

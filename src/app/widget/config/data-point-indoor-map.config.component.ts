@@ -33,6 +33,7 @@ import { CdkDragDrop, moveItemInArray } from "@angular/cdk/drag-drop";
 import { Coordinates } from "../models/coordinates.model";
 import { AssignLocationModalComponent } from "./map-config-modal/assign-locations-step/assign-locations-modal.component";
 import { GPSComponent } from "./select-co-ordinates/gps.component";
+import { ZonesComponent } from "./zones-creation/zones-creation.component";
 // Assuming you have an EditLocationModalComponent to host the map
 // import { EditLocationModalComponent } from "./edit-location-modal/edit-location-modal.component";
 
@@ -72,6 +73,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   ) {}
 
   ngOnInit() {
+    console.log("in config init", this.config);
+
     this.initConfiguration();
     this.initMapConfigurations();
     this.initThresholds();
@@ -143,9 +146,9 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       this.config.mapConfigurationId = this.selectedMapConfigurationId;
 
       // Update config coordinates if building has stored coordinates
-      if (selectedMapConfiguration.coordinates) {
+      /*  if (selectedMapConfiguration.coordinates) {
         this.config.coordinates = selectedMapConfiguration.coordinates;
-      }
+      } */
     }
     this.updateDataPointSeries();
   }
@@ -195,13 +198,40 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     );
 
     const modalRef = this.modalService.show(GPSComponent, {
-      initialState: { coordinates: this.selectedBuilding.coordinates } as any,
+      initialState: { initialConfig: this.config.coordinates } as any,
       class: "modal-lg",
     });
 
     modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
       console.log("Received new boundary config from modal:", newConfig);
       this.onGpsConfigChange(newConfig);
+    });
+  }
+
+  onZoneCreation() {
+    if (!this.selectedBuilding) return;
+    console.log(this.selectedBuilding, "zones");
+
+    const currentCoordinates = this.config.coordinates || {};
+
+    const obj = {
+      ...currentCoordinates,
+      imageUrl: this.selectedBuilding.levels?.[0]?.blob,
+      rotationAngle: this.config.mapSettings.rotationAngle || 0,
+    };
+
+    const modalRef = this.modalService.show(ZonesComponent, {
+      initialState: { initialConfig: obj } as any,
+      class: "modal-lg",
+    });
+
+    modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
+      console.log("Received new boundary config from modal:", newConfig);
+      // The modal returns the rotation angle, so save both coordinates AND rotation angle here.
+      //this.onGpsConfigChange(newConfig);
+
+      // Since rotationAngle is now returned by the modal, extract and save it to mapSettings
+      this.config.mapSettings.rotationAngle = newConfig.rotationAngle || 0;
     });
   }
 
@@ -227,7 +257,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
         zoomLevel: this.DEFAULT_ZOOM_LEVEL,
         rotationAngle: 10,
       },
-      coordinates: {}, // Initialize coordinates object
+      coordinates: {},
       legend: {
         title: "",
         thresholds: [],

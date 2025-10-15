@@ -22,6 +22,7 @@ import { MoveMarkerMapComponent } from "./shared/components/move-marker-map/move
 import { DeviceSelectorModalComponent } from "./shared/components/device-selector-modal/device-selector-modal.component";
 import { GPSComponent } from "./config/select-co-ordinates/gps.component";
 import { AssignLocationModalComponent } from "./config/map-config-modal/assign-locations-step/assign-locations-modal.component";
+import { ZonesComponent } from "./config/zones-creation/zones-creation.component";
 
 @NgModule({
   declarations: [
@@ -32,6 +33,7 @@ import { AssignLocationModalComponent } from "./config/map-config-modal/assign-l
     AssignDevicesStepComponent,
     AssignLocationModalComponent,
     GPSComponent,
+    ZonesComponent,
   ],
   imports: [
     CoreModule,
