@@ -240,18 +240,14 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   }): void {
     if (!this.map || !this.zoneFeatureGroup) return;
 
-    // Renamed from featureGroup to zoneFeatureGroup
     this.zoneFeatureGroup.clearLayers();
 
     let layerToDraw: L.Layer | undefined;
 
-    // NOTE: This logic should ideally only draw the currently edited zone/polygon,
-    // not all zones, but we reuse the single saved layer logic.
-
     const vertices = this.polygonVertices();
     if (vertices) {
       layerToDraw = L.polygon(vertices, {
-        color: "#0000FF", // Changed color for drawn zones
+        color: "#0000FF",
         weight: 2,
         fillOpacity: 0.4,
       });
@@ -268,7 +264,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (layerToDraw) {
       this.zoneFeatureGroup.addLayer(layerToDraw);
-      // Ensure the newly drawn layer is enabled for editing immediately
       (layerToDraw as any).pm.enable({
         allowSelfIntersection: false,
         rotate: true,
@@ -287,46 +282,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.polygonVertices.set(null);
   }
-
-  /*  private drawSavedZones(): void {
-    if (!this.map || !this.zoneFeatureGroup || this.zones().length === 0)
-      return;
-
-    this.zones().forEach((zone: any) => {
-      if (!zone.geometry) return;
-
-      // Use L.GeoJSON to convert the geometry back to a Leaflet layer
-      const layer = L.GeoJSON.geometryToLayer(zone.geometry);
-
-      if (layer) {
-        // Add styling and rotation options
-        layer.setStyle({
-          color: "#0000FF",
-          weight: 2,
-          fillOpacity: 0.4,
-        });
-
-        this.zoneFeatureGroup!.addLayer(layer);
-
-        // Enable Geoman editing and rotation on the loaded layer
-        (layer as any).pm.enable({
-          allowSelfIntersection: false,
-          rotate: true,
-        });
-
-        // If rotation angle was saved, apply it.
-        if (zone.rotation && (layer as any).setRotation) {
-          (layer as any).setRotation(zone.rotation);
-        }
-      }
-    });
-
-    // Optional: Center map on all zones if they were loaded
-    if (this.zoneFeatureGroup.getLayers().length > 0) {
-      this.map!.fitBounds(this.zoneFeatureGroup.getBounds());
-    }
-  }
- */
 
   private drawSavedZones(): void {
     if (!this.map || !this.zoneFeatureGroup || this.zones().length === 0)

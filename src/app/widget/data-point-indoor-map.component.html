@@ -1,12 +1,35 @@
-<div class="map-container" style="height: 100%; padding: 10px;">
+<div class="map-container" style="height: 100%; padding: 10px">
   <c8y-loading class="loading-absolute" *ngIf="isLoading"></c8y-loading>
-  <div class="map-frame" style="height: 100%;">
-    <div #IndoorDataPointMap style="width: 100%; height: 100%; background-color: #fff"></div>
+  <div class="map-frame" style="height: 100%">
+    <div
+      #IndoorDataPointMap
+      style="width: 100%; height: 100%; background-color: #fff"
+    ></div>
   </div>
   <div class="map-legend" *ngIf="building?.levels?.length > 1">
+    <div class="zone-control">
+      <label>
+        <input
+          type="checkbox"
+          [(ngModel)]="showZones"
+          (ngModelChange)="toggleZoneVisibility()"
+        />
+        Show Zones
+      </label>
+    </div>
     <div class="c8y-select-wrapper">
-      <select class="form-control" [(ngModel)]="currentFloorLevel" (ngModelChange)="onLevelChanged()">
-        <option *ngFor="let level of building?.levels; let i = index" value="{{ i }}" title="{{ level.name }}">{{ level.name }}</option>
+      <select
+        class="form-control"
+        [(ngModel)]="currentFloorLevel"
+        (ngModelChange)="onLevelChanged()"
+      >
+        <option
+          *ngFor="let level of building?.levels; let i = index"
+          value="{{ i }}"
+          title="{{ level.name }}"
+        >
+          {{ level.name }}
+        </option>
       </select>
     </div>
   </div>

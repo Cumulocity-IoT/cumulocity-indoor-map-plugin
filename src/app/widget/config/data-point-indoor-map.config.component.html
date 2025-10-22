@@ -99,7 +99,7 @@
       class="btn btn-default btn-block"
       (click)="openMapBoundaryModal()"
     >
-      <i c8yIcon="devices" class="c8y-icon"></i> Draw Map Boundaries
+      <i c8yIcon="location" class="c8y-icon"></i> Draw Map Boundaries
     </button>
   </c8y-form-group>
 
@@ -133,15 +133,16 @@
     </button>
   </c8y-form-group>
 
+  <div class="legend form-block">Zone Management</div>
   <c8y-form-group>
-    <label>Create/Edit zones</label>
-    <p class="small">Create/edit the zones on floor</p>
+    <label>Floor Plan Zones</label>
+    <p class="small"></p>
     <button
       type="button"
       class="btn btn-default btn-block"
       (click)="onZoneCreation()"
     >
-      <i c8yIcon="map-marker" class="c8y-icon"></i>Create/edit zones
+      <i c8yIcon="map-editing" class="c8y-icon"></i>Manage Zones and Boundaries
     </button>
   </c8y-form-group>
 </div>

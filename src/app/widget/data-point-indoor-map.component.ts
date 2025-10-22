@@ -85,6 +85,13 @@ export class DataPointIndoorMapComponent
   eventThresholdSub?: Subscription;
   isLoading = false;
 
+  private zonesFeatureGroup?: L.FeatureGroup;
+  public showZones: boolean = false; // Controls visibility of all zones
+  private loadedZones: any[] = [];
+  private isolatedLayer: L.Layer | null = null;
+  // 🚩 NEW STATE: Track if the view is currently zoomed into a single zone 🚩
+  public isZoneIsolated: boolean = false;
+
   destroy$ = new EventEmitter<void>();
 
   constructor(
@@ -270,6 +277,7 @@ export class DataPointIndoorMapComponent
         });
   }
  */
+
   private updateMarkerColor(deviceId: string) {
     if (!this.config.legend?.thresholds?.length) {
       return;
@@ -385,60 +393,6 @@ export class DataPointIndoorMapComponent
 
   private calculateBounds(): L.LatLngBounds | null {
     if (!!this.config.coordinates) {
-      /*  if (this.config.coordinates.placementMode === "dimensions") {
-        const {
-          anchorLat,
-          anchorLng,
-          width,
-          height,
-          scaleX,
-          scaleY,
-          offsetX,
-          offsetY,
-        } = this.config.coordinates;
-
-        if (
-          anchorLat == null ||
-          anchorLng == null ||
-          width == null ||
-          height == null
-        ) {
-          console.error(
-            "Dimension parameters are missing from the configuration."
-          );
-          return null;
-        }
-
-        // Use default values for optional scale and offset
-        const scaleXVal = scaleX ?? 1;
-        const scaleYVal = scaleY ?? 1;
-        const offsetXVal = offsetX ?? 0;
-        const offsetYVal = offsetY ?? 0;
-
-        const scaledWidth = width * scaleXVal;
-        const scaledHeight = height * scaleYVal;
-
-        const latPerMeter = 1 / 111132;
-        const lngPerMeter =
-          1 / (111320 * Math.cos((anchorLat * Math.PI) / 180));
-
-        const latOffset = offsetYVal * latPerMeter;
-        const lngOffset = offsetXVal * lngPerMeter;
-
-        const heightInLat = scaledHeight * latPerMeter;
-        const widthInLng = scaledWidth * lngPerMeter;
-
-        const topLeft = this.leaf.latLng(
-          parseFloat(anchorLat.toString()) + latOffset,
-          parseFloat(anchorLng.toString()) + lngOffset
-        );
-        const bottomRight = this.leaf.latLng(
-          topLeft.lat - heightInLat,
-          topLeft.lng + widthInLng
-        );
-
-        return this.leaf.latLngBounds(topLeft, bottomRight);
-      } else { */
       const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
         this.config.coordinates;
 
@@ -500,7 +454,7 @@ export class DataPointIndoorMapComponent
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onDragEnd());
     }
-
+    this.renderZones(map);
     return map;
   }
 
@@ -524,23 +478,97 @@ export class DataPointIndoorMapComponent
         (coordinates.topLeftLat + coordinates.bottomRightLat) / 2;
       const centerLng =
         (coordinates.topLeftLng + coordinates.bottomRightLng) / 2;
-      console.log(centerLat, centerLng);
-
       return [centerLat, centerLng];
-    } /* else if (coordinates?.placementMode === "dimensions") {
-      const centerLat =
-        coordinates.anchorLat +
-        coordinates.offsetY +
-        (coordinates.height / 2) * coordinates.scaleY;
-      const centerLng =
-        coordinates.anchorLng +
-        coordinates.offsetX +
-        (coordinates.width / 2) * coordinates.scaleX;
-      console.log(centerLat, centerLng);
-      return [centerLat, centerLng];
-    } */ else {
+    } else {
       return [51.23544, 6.79599];
     }
+  }
+
+  private renderZones(map: L.Map): void {
+    if (!this.zonesFeatureGroup) {
+      this.zonesFeatureGroup = this.leaf.featureGroup().addTo(map);
+    }
+
+    this.zonesFeatureGroup.clearLayers();
+
+    if (!this.showZones || !this.config.coordinates) {
+      // If zones are supposed to be hidden, ensure we are not isolated.
+      this.isolatedLayer = null;
+      this.isZoneIsolated = false;
+      return;
+    }
+
+    // 1. Parse Zones from config (same logic as before)
+    const zonesJsonString = (this.config.zones as any).zonesJson;
+    if (
+      !(
+        zonesJsonString &&
+        typeof zonesJsonString === "string" &&
+        zonesJsonString.length > 0
+      )
+    ) {
+      this.loadedZones = [];
+      return;
+    }
+    try {
+      this.loadedZones = JSON.parse(zonesJsonString);
+    } catch (e) {
+      console.error("Failed to parse zones JSON during rendering:", e);
+      this.loadedZones = [];
+      return;
+    }
+    if (this.isZoneIsolated && this.isolatedLayer) {
+      this.isolatedLayer.addTo(map);
+      return;
+    }
+    // 2. Draw each zone and add click handlers
+    this.loadedZones.forEach((zone: any) => {
+      if (!zone.geometry) return;
+
+      const layer = this.leaf.geoJSON(zone.geometry);
+
+      layer.eachLayer((vectorLayer) => {
+        // Check if it's a vector layer (L.Path) for styling
+        if (vectorLayer instanceof this.leaf.Path) {
+          (vectorLayer as any).setStyle({
+            color: "#0000FF",
+            weight: 3,
+            fillOpacity: 0.3,
+          });
+        }
+        vectorLayer.on("click", (e: L.LeafletMouseEvent) => {
+          const clickedLayer = e.target;
+          const mapInstance = map;
+
+          if (clickedLayer.getBounds && clickedLayer.getBounds().isValid()) {
+            const bounds = clickedLayer.getBounds();
+
+            // 1. ISOLATE & UPDATE STATE: Remove the feature group and save the layer reference
+            this.zonesFeatureGroup!.remove();
+
+            this.isolatedLayer = clickedLayer;
+            this.isZoneIsolated = true;
+
+            clickedLayer.addTo(mapInstance); // Add the isolated layer to the map
+
+            // 2. ZOOM: Use a forced invalidation pattern to guarantee the zoom executes.
+
+            // a. Invalidate size first
+            mapInstance.invalidateSize(true);
+
+            // b. Apply fitBounds
+            mapInstance.fitBounds(bounds, {
+              padding: [50, 50],
+              maxZoom: 18,
+            });
+
+            // 3. Prevent map from restoring the full view immediately
+            // The 'renderZones' function now checks this.isZoneIsolated and stops rendering the feature group.
+          }
+        });
+        this.zonesFeatureGroup!.addLayer(vectorLayer);
+      });
+    });
   }
 
   private updateMapLevel(level: MapConfigurationLevel) {
@@ -566,13 +594,6 @@ export class DataPointIndoorMapComponent
       return;
     }
 
-    /*  const map = this.leaf.map(this.mapReference.nativeElement, {
-      minZoom: 0,
-      maxZoom: 18,
-      zoomSnap: 0.25,
-      zoomDelta: 0.25,
-    }); */
-
     if (level.blob) {
       const imgBlobURL = URL.createObjectURL(level.blob);
       const imageOverlay = this.leaf.imageOverlay(imgBlobURL, bounds, {
@@ -586,7 +607,7 @@ export class DataPointIndoorMapComponent
 
       map.setView(center, zoom);
       map.fitBounds(imageOverlay.getBounds());
-
+      this.renderZones(map);
       // Add event listeners for zoom and drag
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
@@ -596,6 +617,11 @@ export class DataPointIndoorMapComponent
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onDragEnd());
     }
+  }
+
+  public toggleZoneVisibility(): void {
+    if (!this.map) return;
+    this.renderZones(this.map); // Rerun renderZones, which will show/hide based on this.showZones
   }
   /**
    * initialize the map markers for the current floor level
