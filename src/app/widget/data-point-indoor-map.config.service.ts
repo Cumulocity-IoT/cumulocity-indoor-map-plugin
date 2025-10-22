@@ -15,20 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { Injectable } from '@angular/core';
-import { InventoryService } from '@c8y/client';
-import { uniq } from 'lodash';
-import { isMapConfigutaration, MapConfiguration } from './data-point-indoor-map.model';
-import { AlertService, ModalService, Status } from '@c8y/ngx-components';
+import { Injectable } from "@angular/core";
+import { InventoryService } from "@c8y/client";
+import { uniq } from "lodash";
+import {
+  isMapConfigutaration,
+  MapConfiguration,
+} from "./data-point-indoor-map.model";
+import { AlertService, ModalService, Status } from "@c8y/ngx-components";
 
 @Injectable()
 export class DataPointIndoorMapConfigService {
-  constructor(private inventoryService: InventoryService, private modal: ModalService, private alertService: AlertService) {}
+  constructor(
+    private inventoryService: InventoryService,
+    private modal: ModalService,
+    private alertService: AlertService
+  ) {}
 
   async loadSmartMapConfigurations(): Promise<MapConfiguration[]> {
     const filter = {
       pageSize: 2000,
-      type: 'c8y_Building',
+      type: "c8y_Building",
     };
 
     try {
@@ -48,35 +55,49 @@ export class DataPointIndoorMapConfigService {
   }
 
   deleteMapConfiguration(mapConfigurationId: string) {
-    return this.modal.confirm('Delete map configuration', 'Are you sure you want to delete this map configuration?', Status.DANGER).then((result) => {
-      if (result) {
-        return this.inventoryService.delete(mapConfigurationId).then(
-          () => {
-            this.alertService.success('Map configuration deleted successfully');
-            return true;
-          },
-          () => {
-            return false;
-          }
-        );
-      }
-      return false;
-    });
+    return this.modal
+      .confirm(
+        "Delete map configuration",
+        "Are you sure you want to delete this map configuration?",
+        Status.DANGER
+      )
+      .then((result) => {
+        if (result) {
+          return this.inventoryService.delete(mapConfigurationId).then(
+            () => {
+              this.alertService.success(
+                "Map configuration deleted successfully"
+              );
+              return true;
+            },
+            () => {
+              return false;
+            }
+          );
+        }
+        return false;
+      });
   }
 
-  async getSupportedSeriesFromMapConfiguration(mapConfiguration: MapConfiguration): Promise<string[]> {
+  async getSupportedSeriesFromMapConfiguration(
+    mapConfiguration: MapConfiguration
+  ): Promise<string[]> {
     if (!mapConfiguration) {
       return [];
     }
 
     const uniqueDeviceIds = new Set<string>();
     mapConfiguration.levels.forEach((l) => {
-      l.markers.forEach((id) => {
+      l.markers?.forEach((id) => {
         uniqueDeviceIds.add(id);
       });
     });
     try {
-      const res = await Promise.all(Array.from(uniqueDeviceIds.values()).map((id) => this.inventoryService.getSupportedSeries(id)));
+      const res = await Promise.all(
+        Array.from(uniqueDeviceIds.values()).map((id) =>
+          this.inventoryService.getSupportedSeries(id)
+        )
+      );
       const datapoints = uniq(res.flat());
       return datapoints;
     } catch (e) {

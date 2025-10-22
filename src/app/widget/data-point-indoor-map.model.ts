@@ -31,6 +31,7 @@ export interface WidgetConfiguration {
   datapointsPopup?: DatapointPopup[];
   coordinates?: GPSCoordinates;
   zones?: ZoneGeometry[];
+  allZonesByLevel?: { [levelName: string]: ZoneGeometry[] };
 }
 
 export type Threshold = {
@@ -96,6 +97,7 @@ export interface MapConfigurationLevel {
     dimensions?: { width: number; height: number };
     corners: Array<{ lat: number; lng: number }>;
   };
+  image?: string;
 }
 
 export interface MarkerManagedObject extends IManagedObject {
@@ -106,8 +108,10 @@ export interface MarkerManagedObject extends IManagedObject {
 }
 
 export interface GPSConfigWithImage extends GPSCoordinates {
-  mapConfigId?: string;
-  rotationAngle?: number;
+  rotationAngle: number;
+  allZonesByLevel?: { [levelName: string]: ZoneGeometry[] };
+
+  building?: MapConfiguration;
 }
 
 export interface ZoneGeometry {

@@ -207,14 +207,16 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onZoneCreation() {
+    console.log("bb", this.selectedBuilding);
+
     if (!this.selectedBuilding) return;
-    const currentCoordinates = this.config.coordinates || {};
+    const currentCoordinates = this.config?.coordinates || {};
 
     const obj = {
       ...currentCoordinates,
-      mapConfigId: this.config.mapConfigurationId,
-      rotationAngle: this.config.mapSettings.rotationAngle || 0,
-      zones: this.config.zones || [],
+      rotationAngle: this.config?.mapSettings?.rotationAngle || 0,
+      allZonesByLevel: this.config?.allZonesByLevel || [],
+      building: this.selectedBuilding,
     };
 
     const modalRef = this.modalService.show(ZonesComponent, {
@@ -238,7 +240,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       this.config.mapConfigurationId &&
       this.config.measurement
     ) {
-      if (!this.config.mapSettings.rotationAngle) {
+      if (!this.config?.mapSettings?.rotationAngle) {
         this.config.mapSettings.rotationAngle = this.DEFAULT_ROTATION_ANGLE;
       }
       return;
@@ -383,15 +385,14 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   onGpsConfigChange(newConfig: any): void {
     console.log("Parent received new config (Boundaries):", newConfig);
-    // Update the widget config's coordinates property
+
     this.config.coordinates = newConfig;
     this.isSaved = false;
   }
 
   onZoneChange(newConfig: any): void {
     console.log("Parent received new config (Zones):", newConfig);
-    // Update the widget config's coordinates property
-    this.config.zones = newConfig;
+    this.config.allZonesByLevel = newConfig.allZonesByLevel;
     this.isSaved = false;
   }
 
@@ -403,7 +404,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     }
 
     const coords = config.coordinates as any;
-    this.config.mapSettings.rotationAngle = 180;
     const hasValidCorners =
       coords?.placementMode === "corners" &&
       coords.topLeftLat &&

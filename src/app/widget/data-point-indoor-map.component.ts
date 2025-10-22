@@ -35,6 +35,7 @@ import {
   Measurement,
   Threshold,
   WidgetConfiguration,
+  ZoneGeometry,
 } from "./data-point-indoor-map.model";
 import { DataPointIndoorMapService } from "./data-point-indoor-map.service";
 import type * as L from "leaflet";
@@ -89,7 +90,6 @@ export class DataPointIndoorMapComponent
   public showZones: boolean = false; // Controls visibility of all zones
   private loadedZones: any[] = [];
   private isolatedLayer: L.Layer | null = null;
-  // 🚩 NEW STATE: Track if the view is currently zoomed into a single zone 🚩
   public isZoneIsolated: boolean = false;
 
   destroy$ = new EventEmitter<void>();
@@ -499,14 +499,14 @@ export class DataPointIndoorMapComponent
     }
 
     // 1. Parse Zones from config (same logic as before)
-    const zonesJsonString = (this.config.zones as any).zonesJson;
-    if (
-      !(
-        zonesJsonString &&
-        typeof zonesJsonString === "string" &&
-        zonesJsonString.length > 0
-      )
-    ) {
+    const allZonesData = this.config?.allZonesByLevel;
+
+    let zonesJsonString;
+    if (allZonesData) {
+      zonesJsonString = allZonesData[this.currentFloorLevel];
+    }
+
+    if (!(zonesJsonString && typeof zonesJsonString === "string")) {
       this.loadedZones = [];
       return;
     }
