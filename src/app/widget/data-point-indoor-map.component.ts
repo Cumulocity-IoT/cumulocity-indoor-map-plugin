@@ -574,8 +574,16 @@ export class DataPointIndoorMapComponent
   private updateMapLevel(level: MapConfigurationLevel) {
     const map = this.map!;
 
+    // Clear the existing zones feature group first
+    if (this.zonesFeatureGroup) {
+      this.zonesFeatureGroup.clearLayers();
+    }
+
+    // Clear all other layers
     map.eachLayer((layer) => {
-      layer.removeFrom(map);
+      if (layer !== this.zonesFeatureGroup) {
+        layer.removeFrom(map);
+      }
     });
 
     // Add the base tile layer
@@ -607,7 +615,7 @@ export class DataPointIndoorMapComponent
 
       map.setView(center, zoom);
       map.fitBounds(imageOverlay.getBounds());
-      this.renderZones(map);
+
       // Add event listeners for zoom and drag
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
@@ -616,6 +624,7 @@ export class DataPointIndoorMapComponent
       fromEvent<L.LeafletEvent>(map, "dragend")
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onDragEnd());
+      this.renderZones(map);
     }
   }
 
@@ -727,9 +736,20 @@ export class DataPointIndoorMapComponent
     //   weight: 0,
     //   interactive: true,
     // });
-    const { lat, lng } = get(managedObject, "c8y_Position");
-    //managedObject.[c8y_Position]!;
-    return this.leaf.circleMarker([lat, lng], {
+    const position = get(managedObject, "c8y_Position") as
+      | { lat: number; lng: number }
+      | undefined;
+    if (!position) {
+      // Fallback position with default style, though this should never happen due to earlier check
+      return this.leaf.circleMarker([0, 0], {
+        fillColor: this.MARKER_DEFAULT_COLOR,
+        fillOpacity: 0.75,
+        radius: 13,
+        weight: 0,
+        interactive: true,
+      });
+    }
+    return this.leaf.circleMarker([position.lat, position.lng], {
       fillColor: this.getBackgroundColor(
         managedObject[this.KEY_LATEST_MEASUREMENT]
       ),

@@ -20,6 +20,7 @@ import {
   GPSCoordinates,
 } from "../../data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
+import { InventoryBinaryService } from "@c8y/client";
 
 @Component({
   selector: "c8y-zone-creation-component",
@@ -60,7 +61,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   private imageOverlayLayer: L.ImageOverlay | undefined;
 
   polygonVertices = signal<L.LatLng[][] | null>(null);
-  zones = signal<any[]>([]); // Current floor's zones
+  zones = signal<any[]>([]);
   imageBounds = signal({
     tl: { lat: 0, lng: 0 },
     br: { lat: 0, lng: 0 },
@@ -71,7 +72,8 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   private allZonesByLevel: { [levelId: string]: string } = {};
 
   constructor(
-    private bsModalRef: BsModalRef // private mapService: DataPointIndoorMapService
+    private bsModalRef: BsModalRef,
+    private binaryService: InventoryBinaryService
   ) {
     effect(() => {
       const bounds = this.imageBounds();
@@ -131,22 +133,33 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  ngAfterViewInit(): void {
+  async ngAfterViewInit(): Promise<void> {
     if (typeof L === "undefined") {
       console.error("Leaflet library is not loaded.");
       return;
     }
-    this.initMap();
+    await this.initMap();
+
     if (this.map) {
       setTimeout(() => {
-        this.map!.invalidateSize(true);
-        this.centerMapOnBounds();
+        if (this.map) {
+          this.map.invalidateSize(true);
+          const currentZones = this.zones();
+          if (currentZones && currentZones.length > 0) {
+            this.drawSavedZones();
+          }
 
-        this.drawSavedZones();
-
-        console.log("Map initialized and size invalidated.");
+          this.centerMapOnBounds();
+        }
       }, 300);
     }
+  }
+
+  private async getImage(imageId: string): Promise<Blob> {
+    const imageBlob = await (
+      (await this.binaryService.download(imageId)) as Response
+    ).blob();
+    return imageBlob;
   }
 
   private drawSavedBoundary(bounds: {
@@ -227,7 +240,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     return new RotatedOverlay(url, bounds, options) as L.ImageOverlay;
   }
 
-  private initMap(): void {
+  private async initMap() {
     const initialBounds = this.imageBounds();
     const bounds = this.getLeafletBounds(initialBounds);
     const currentLevelConfig =
@@ -244,60 +257,85 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
 
-    // Image Overlay Placement
-    if (currentLevelConfig?.blob && bounds) {
-      // Use image string or blob URL if available
-      const imgSource =
-        currentLevelConfig.blob instanceof Blob
-          ? URL.createObjectURL(currentLevelConfig.blob)
-          : currentLevelConfig.image || "";
-
-      this.imageOverlayLayer = this.createRotatedImageOverlay(
-        imgSource,
-        bounds,
-        this.initialConfig.rotationAngle || 0,
-        { opacity: 0.8, interactive: true }
-      );
-      this.imageOverlayLayer.addTo(this.map);
-      this.map.fitBounds(bounds);
-    }
-
+    // Initialize Geoman controls first
     this.initGeomanControl();
+
+    // Image Overlay Placement
+    if (currentLevelConfig?.binaryId && bounds) {
+      try {
+        const imgSource = URL.createObjectURL(
+          await this.getImage(currentLevelConfig.binaryId)
+        );
+
+        this.imageOverlayLayer = this.createRotatedImageOverlay(
+          imgSource,
+          bounds,
+          this.initialConfig.rotationAngle || 0,
+          { opacity: 1, interactive: true }
+        );
+        this.imageOverlayLayer.addTo(this.map);
+        this.map.fitBounds(bounds);
+
+        // Draw zones after image is loaded
+        this.drawSavedZones();
+      } catch (error) {
+        console.error("Failed to load image overlay:", error);
+      }
+    }
   }
 
   private drawSavedZones(): void {
-    if (!this.map || !this.zoneFeatureGroup) return;
+    if (!this.map) return;
 
+    // Ensure we have a feature group
+    if (!this.zoneFeatureGroup) {
+      this.zoneFeatureGroup = new L.FeatureGroup();
+      this.map.addLayer(this.zoneFeatureGroup);
+    }
+
+    // Clear existing layers
     this.zoneFeatureGroup.clearLayers();
 
     const currentZones = this.zones();
 
-    if (currentZones.length === 0) return;
+    if (!currentZones || currentZones.length === 0) {
+      console.log("No zones to draw"); // Debug log
+      return;
+    }
 
-    currentZones.forEach((zone: any) => {
-      if (!zone.geometry) return;
+    currentZones.forEach((zone: any, index: number) => {
+      if (!zone.geometry) {
+        console.log(`Zone ${index} has no geometry`); // Debug log
+        return;
+      }
 
-      const layer = L.GeoJSON.geometryToLayer(zone.geometry);
+      try {
+        const layer = L.GeoJSON.geometryToLayer(zone.geometry);
 
-      if (layer) {
-        if (layer instanceof L.Path) {
-          (layer as any).setStyle({
-            color: "#0000FF",
-            weight: 2,
-            fillOpacity: 0.4,
-          });
+        if (layer) {
+          if (layer instanceof L.Path) {
+            (layer as any).setStyle({
+              color: "#0000FF",
+              weight: 2,
+              fillOpacity: 0.4,
+            });
+          }
+
+          this.zoneFeatureGroup!.addLayer(layer);
+
+          if ((layer as any).pm) {
+            (layer as any).pm.enable({
+              allowSelfIntersection: false,
+              rotate: true,
+            });
+          }
+
+          if (zone.rotation && (layer as any).setRotation) {
+            (layer as any).setRotation(zone.rotation);
+          }
         }
-
-        this.zoneFeatureGroup!.addLayer(layer);
-
-        (layer as any).pm.enable({
-          allowSelfIntersection: false,
-          rotate: true,
-        });
-
-        if (zone.rotation && (layer as any).setRotation) {
-          (layer as any).setRotation(zone.rotation);
-        }
+      } catch (error) {
+        console.error(`Failed to create layer for zone ${index}:`, error);
       }
     });
 
@@ -327,7 +365,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       dragMode: true,
       cutPolygon: false,
       deleteMode: true,
-      rotateMode: true, // Rotation enabled globally
+      rotateMode: true,
       allowSelfIntersection: false,
 
       edit: {
@@ -335,28 +373,10 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       },
     });
 
-    // 1. Initial Load is now handled by ngOnInit and the call to drawSavedZones in ngAfterViewInit
-
-    // 2. pm:create (Handle New Zones)
     mapWithPm.on("pm:create", (e: any) => {
       const layer = e.layer;
       this.zoneFeatureGroup?.addLayer(layer);
       layer.pm.enable({ allowSelfIntersection: false, rotate: true });
-      this.updateZonesState();
-    });
-
-    // 3. pm:edit (Handle drag/resize/vertex edit)
-    mapWithPm.on("pm:edit", (e: any) => {
-      this.updateZonesState();
-    });
-
-    // 4. pm:rotateend (Handle Rotation)
-    mapWithPm.on("pm:rotateend", (e: any) => {
-      this.updateZonesState();
-    });
-
-    // 5. pm:remove (Handle Deletion)
-    mapWithPm.on("pm:remove", (e: any) => {
       this.updateZonesState();
     });
   }
@@ -392,60 +412,70 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private redrawMapContents(): void {
+  private async redrawMapContents() {
     if (!this.map) return;
-    const mapWithPm = this.map as any;
-    // 1. Clear existing layers (zones and old image overlay)
+
+    // 1. Clear ALL layers
     this.map.eachLayer((layer) => {
-      if (layer !== this.map?.options.layers?.[0]) {
-        layer.remove();
-      }
+      layer.remove();
     });
 
-    // 2. Load the current floor's configuration data
+    // 2. Re-add the tile layer
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(this.map);
+
+    // 3. Load the current floor's configuration data
     const currentLevelConfig =
       this.initialConfig?.building?.levels?.[this.currentFloorLevel];
     const initialBounds = this.imageBounds();
     const bounds = this.getLeafletBounds(initialBounds);
 
-    // 3. Redraw Image Overlay
-    if (currentLevelConfig?.blob && bounds) {
-      const imgSource =
-        currentLevelConfig.blob instanceof Blob
-          ? URL.createObjectURL(currentLevelConfig.blob)
-          : currentLevelConfig.image || "";
-      const rotationAngle = this.initialConfig.rotationAngle || 0;
+    // 3. Redraw Image Overlay (ASYNCHRONOUSLY)
+    if (currentLevelConfig?.binaryId && bounds) {
+      try {
+        const imgBlob = await this.getImage(currentLevelConfig.binaryId);
+        const imgSource = URL.createObjectURL(imgBlob);
+        const rotationAngle = this.initialConfig.rotationAngle || 0;
 
-      this.imageOverlayLayer = this.createRotatedImageOverlay(
-        imgSource,
-        bounds,
-        rotationAngle,
-        { opacity: 0.8, interactive: true }
-      );
-      this.imageOverlayLayer.addTo(this.map);
-    }
+        // Remove old image overlay if it exists
+        if (this.imageOverlayLayer) {
+          this.imageOverlayLayer.remove();
+        }
 
-    // 4. Re-enable Geoman FeatureGroup
-    this.zoneFeatureGroup = new L.FeatureGroup();
-    this.map.addLayer(this.zoneFeatureGroup);
-    if (mapWithPm.pm.controls) {
-      // Find the edit control instance (this assumes you used the default toolbar structure)
-      const editControl = mapWithPm.pm
-        .getControls()
-        .find((c: any) => c.name === "edit");
+        this.imageOverlayLayer = this.createRotatedImageOverlay(
+          imgSource,
+          bounds,
+          rotationAngle,
+          { opacity: 1, interactive: true }
+        );
+        this.imageOverlayLayer.addTo(this.map);
 
-      if (editControl) {
-        editControl.setOptions({
-          edit: { featureGroup: this.zoneFeatureGroup },
-        });
+        // Ensure bounds are properly set
+        this.map.fitBounds(bounds);
+      } catch (error) {
+        console.error("Failed to load image overlay:", error);
       }
-    }
-    // 5. Redraw Zones
-    this.drawSavedZones();
 
-    // 6. Final refresh
-    this.map.invalidateSize(true);
-    this.centerMapOnBounds();
+      // 4. Re-enable Geoman FeatureGroup
+      // NOTE: This must be done AFTER removing the old one!
+      this.zoneFeatureGroup = new L.FeatureGroup();
+      this.map.addLayer(this.zoneFeatureGroup);
+
+      const mapWithPm = this.map as any;
+      mapWithPm.pm.setOptions({
+        edit: { featureGroup: this.zoneFeatureGroup },
+      });
+
+      // 5. Redraw Zones (drawSavedZones clears and adds to zoneFeatureGroup)
+      this.drawSavedZones();
+
+      // 6. Final refresh
+      this.map.invalidateSize(true);
+      this.centerMapOnBounds();
+    }
   }
 
   private updateZonesState(): void {
@@ -472,8 +502,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.emitConfigChange(null);
   }
-
-  // ... (mapToConfig remains the same)
 
   private emitConfigChange(payload: any): void {
     const currentBounds = this.imageBounds();

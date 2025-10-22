@@ -97,7 +97,6 @@ export interface MapConfigurationLevel {
     dimensions?: { width: number; height: number };
     corners: Array<{ lat: number; lng: number }>;
   };
-  image?: string;
 }
 
 export interface MarkerManagedObject extends IManagedObject {
