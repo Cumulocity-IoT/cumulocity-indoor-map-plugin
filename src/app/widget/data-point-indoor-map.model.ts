@@ -30,6 +30,7 @@ export interface WidgetConfiguration {
   };
   datapointsPopup?: DatapointPopup[];
   coordinates?: GPSCoordinates;
+  zones?: ZoneGeometry[];
 }
 
 export type Threshold = {
@@ -105,6 +106,13 @@ export interface MarkerManagedObject extends IManagedObject {
 }
 
 export interface GPSConfigWithImage extends GPSCoordinates {
-  imageUrl?: string;
+  mapConfigId?: string;
   rotationAngle?: number;
+}
+
+export interface ZoneGeometry {
+  type: string;
+  coordinates: L.LatLng[][];
+  rotation?: number; // Keep rotation for each zone if available
+  bounds: { tl: L.LatLng; br: L.LatLng }; // Simplified bounds for re-centering
 }

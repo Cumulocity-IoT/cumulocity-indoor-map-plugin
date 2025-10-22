@@ -73,8 +73,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   ) {}
 
   ngOnInit() {
-    console.log("in config init", this.config);
-
     this.initConfiguration();
     this.initMapConfigurations();
     this.initThresholds();
@@ -210,14 +208,13 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   onZoneCreation() {
     if (!this.selectedBuilding) return;
-    console.log(this.selectedBuilding, "zones");
-
     const currentCoordinates = this.config.coordinates || {};
 
     const obj = {
       ...currentCoordinates,
-      imageUrl: this.selectedBuilding.levels?.[0]?.blob,
+      mapConfigId: this.config.mapConfigurationId,
       rotationAngle: this.config.mapSettings.rotationAngle || 0,
+      zones: this.config.zones || [],
     };
 
     const modalRef = this.modalService.show(ZonesComponent, {
@@ -228,10 +225,10 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
       console.log("Received new boundary config from modal:", newConfig);
       // The modal returns the rotation angle, so save both coordinates AND rotation angle here.
-      //this.onGpsConfigChange(newConfig);
+      this.onZoneChange(newConfig);
 
       // Since rotationAngle is now returned by the modal, extract and save it to mapSettings
-      this.config.mapSettings.rotationAngle = newConfig.rotationAngle || 0;
+      // this.config.mapSettings.rotationAngle = newConfig.rotationAngle || 0;
     });
   }
 
@@ -388,6 +385,13 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     console.log("Parent received new config (Boundaries):", newConfig);
     // Update the widget config's coordinates property
     this.config.coordinates = newConfig;
+    this.isSaved = false;
+  }
+
+  onZoneChange(newConfig: any): void {
+    console.log("Parent received new config (Zones):", newConfig);
+    // Update the widget config's coordinates property
+    this.config.zones = newConfig;
     this.isSaved = false;
   }
 
