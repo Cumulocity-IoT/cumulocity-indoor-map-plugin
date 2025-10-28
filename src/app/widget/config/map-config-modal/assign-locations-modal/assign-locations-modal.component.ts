@@ -10,7 +10,7 @@ import {
   MapConfiguration,
   MapConfigurationLevel,
   MarkerManagedObject,
-} from "../../../data-point-indoor-map.model";
+} from "../../../../models/data-point-indoor-map.model";
 import {
   IManagedObject,
   IManagedObjectBinary,
@@ -31,7 +31,7 @@ import { BsModalRef } from "ngx-bootstrap/modal";
 })
 export class AssignLocationModalComponent implements OnInit, OnDestroy {
   selectedLevel?: MapConfigurationLevel;
-  selectedItem?: MarkerManagedObject;
+  selectedItem?: {id : string, name ?: string, c8y_Position ?: {lat: number, lng: number}};
   selectedItemIsSensor = false;
   @Input() building!: MapConfiguration;
 
@@ -59,6 +59,7 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.selectLevel(this.building.levels[0]);
     console.log(this.building);
+    console.log(this.selectedLevel)
     if (
       this.building.coordinates.bottomRightLat &&
       this.building.coordinates.bottomRightLng &&
@@ -77,7 +78,7 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  selectItem(device: IManagedObject) {
+  selectItem(device: {id : string, name ?: string}) {
     this.selectedItem = device;
   }
 
@@ -151,8 +152,6 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
         this.selectedItem.c8y_Position.lng = position.lng;
       }
       await this.inventory.update(this.selectedItem);
-      // Display a notification after updating the position
-      // Inject AlertService in the constructor: private alertService: AlertService
       this.alertService.success("Device position updated successfully.");
     }
   }

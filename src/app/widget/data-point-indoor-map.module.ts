@@ -5,33 +5,35 @@ import { TooltipModule } from "ngx-bootstrap/tooltip";
 import { ColorPickerModule } from "ngx-color-picker";
 import {
   CoreModule,
+  DynamicWidgetDefinition,
   FormsModule,
   gettext,
-  hookComponent,
+  hookWidget,
+  WidgetDataType,
 } from "@c8y/ngx-components";
 import { DataPointIndoorMapComponent } from "./data-point-indoor-map.component";
 import { DataPointIndoorMapConfigComponent } from "./config/data-point-indoor-map.config.component";
 import { ManagedDatapointsPopupModalComponent } from "./config/managed-datapoints-popup-modal/managed-datapoints-popup-modal.component";
 import { ModalModule } from "ngx-bootstrap/modal";
-import { MapConfigurationModalComponent } from "./config/map-config-modal/map-config-modal.component";
-import { VirtualDraggableDeviceListComponent } from "./shared/components/virtual-draggable-device-list/virtual-draggable-device-list.component";
-import { DragDropModule } from "@angular/cdk/drag-drop";
-import { AssignDevicesStepComponent } from "./config/map-config-modal/assign-devices-step/assign-devices-step.component";
 import { ImageUploadComponent } from "./shared/components/image-upload/image-upload.component";
 import { MoveMarkerMapComponent } from "./shared/components/move-marker-map/move-marker-map.component";
 import { DeviceSelectorModalComponent } from "./shared/components/device-selector-modal/device-selector-modal.component";
 import { GPSComponent } from "./config/select-co-ordinates/gps.component";
-import { AssignLocationModalComponent } from "./config/map-config-modal/assign-locations-step/assign-locations-modal.component";
 import { ZonesComponent } from "./config/zones-creation/zones-creation.component";
+import { AssignLocationModalComponent } from "./config/map-config-modal/assign-locations-modal/assign-locations-modal.component";
+import { AssignDevicesModalComponent } from "./config/map-config-modal/assign-devices-modal/assign-devices-modal.component";
+import { AssetSelectorModule } from "@c8y/ngx-components/assets-navigator";
+import { TypeaheadModule } from "ngx-bootstrap/typeahead";
+import { FloorConfigModalComponent } from "./config/floor-configuration-modal/floor-config-modal.component";
 
 @NgModule({
   declarations: [
     DataPointIndoorMapComponent,
     DataPointIndoorMapConfigComponent,
     ManagedDatapointsPopupModalComponent,
-    MapConfigurationModalComponent,
-    AssignDevicesStepComponent,
+    AssignDevicesModalComponent,
     AssignLocationModalComponent,
+    FloorConfigModalComponent,
     GPSComponent,
     ZonesComponent,
   ],
@@ -42,23 +44,34 @@ import { ZonesComponent } from "./config/zones-creation/zones-creation.component
     TooltipModule,
     ColorPickerModule,
     ModalModule,
-    DragDropModule,
-    VirtualDraggableDeviceListComponent,
     ImageUploadComponent,
     MoveMarkerMapComponent,
     DeviceSelectorModalComponent,
+    AssetSelectorModule,
+    TypeaheadModule.forRoot(),
   ],
   providers: [
-    hookComponent({
+    hookWidget({
       id: "indoor-data-point-map-widget",
       label: gettext("Indoor Map Widget"),
       description: gettext(
         "Display markers on a indoor map and their datapoints"
       ),
+      data: {
+        settings: {
+          ng1: {
+            options: {
+              noDeviceTarget: true,
+              deviceTargetNotRequired: true,
+              groupsSelectable: false,
+            },
+          },
+        },
+      } as WidgetDataType,
       component: DataPointIndoorMapComponent,
       configComponent: DataPointIndoorMapConfigComponent,
       previewImage: assetPaths.previewImage,
-    }),
+    } as DynamicWidgetDefinition),
   ],
 })
 export class DataPointIndoorMapModule {}

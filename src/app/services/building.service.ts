@@ -24,19 +24,27 @@ import {
   MeasurementService,
   Realtime,
 } from "@c8y/client";
+
+import { has, get, uniq } from "lodash";
+import { filter, Subject, Subscription } from "rxjs";
+import {
+  AlertService,
+  MeasurementRealtimeService,
+  ModalService,
+  Status,
+} from "@c8y/ngx-components";
 import {
   Datapoint,
   isMapConfigutaration,
   MapConfiguration,
   MapConfigurationLevel,
   Measurement,
-} from "./data-point-indoor-map.model";
-import { has, get } from "lodash";
-import { filter, Subject, Subscription } from "rxjs";
-import { MeasurementRealtimeService } from "@c8y/ngx-components";
+} from "../models/data-point-indoor-map.model";
 
-@Injectable()
-export class DataPointIndoorMapService {
+@Injectable({
+  providedIn: "root", // <-- Add this
+})
+export class BuildingService {
   public primaryMeasurementReceived$: Subject<{
     deviceId: string;
     measurement: Measurement;
@@ -52,7 +60,9 @@ export class DataPointIndoorMapService {
     private inventoryService: InventoryService,
     private binaryService: InventoryBinaryService,
     private measurementService: MeasurementService,
-    private measurementRealtime: MeasurementRealtimeService
+    private measurementRealtime: MeasurementRealtimeService,
+    private modal: ModalService,
+    private alertService: AlertService
   ) {}
 
   /*   async loadMapConfigurationWithImages(
@@ -115,6 +125,7 @@ export class DataPointIndoorMapService {
     );
 
     const dimensionPromises = levelsWithBinary.map((level, index) => {
+      console.log(level);
       level.blob = imageBlobs[index];
       return this.readImage(level.blob!).then(({ width, height }) => {
         level.imageDetails.dimensions = { width, height };
@@ -123,6 +134,95 @@ export class DataPointIndoorMapService {
     await Promise.all(dimensionPromises);
 
     return mapConfiguration;
+  }
+
+  async loadSmartMapConfigurations(): Promise<MapConfiguration[]> {
+    const filter = {
+      pageSize: 2000,
+      type: "c8y_Building",
+    };
+
+    try {
+      const { data } = await this.inventoryService.list(filter);
+      return data
+        .map((item) => {
+          if (isMapConfigutaration(item)) {
+            return item;
+          }
+          return undefined;
+        })
+        .filter((item) => item !== undefined);
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  }
+
+  async loadMapConfiguration(
+    mapConfigurationId: string
+  ): Promise<MapConfiguration | undefined> {
+    try {
+      const { data } = await this.inventoryService.detail(mapConfigurationId);
+      if (isMapConfigutaration(data)) {
+        return data;
+      }
+      return undefined;
+    } catch (error) {
+      console.error(error);
+      return undefined;
+    }
+  }
+
+  deleteMapConfiguration(mapConfigurationId: string) {
+    return this.modal
+      .confirm(
+        "Delete map configuration",
+        "Are you sure you want to delete this map configuration?",
+        Status.DANGER
+      )
+      .then((result) => {
+        if (result) {
+          return this.inventoryService.delete(mapConfigurationId).then(
+            () => {
+              this.alertService.success(
+                "Map configuration deleted successfully"
+              );
+              return true;
+            },
+            () => {
+              return false;
+            }
+          );
+        }
+        return false;
+      });
+  }
+
+  async getSupportedSeriesFromMapConfiguration(
+    mapConfiguration: MapConfiguration
+  ): Promise<string[]> {
+    if (!mapConfiguration) {
+      return [];
+    }
+
+    const uniqueDeviceIds = new Set<string>();
+    mapConfiguration.levels.forEach((l) => {
+      l.markers.forEach((m) => {
+        uniqueDeviceIds.add(m.id);
+      });
+    });
+    try {
+      const res = await Promise.all(
+        Array.from(uniqueDeviceIds.values()).map((id) =>
+          this.inventoryService.getSupportedSeries(id)
+        )
+      );
+      const datapoints = uniq(res.flat());
+      return datapoints;
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
   }
 
   /*  private async readImage(blob: Blob) {
@@ -161,17 +261,21 @@ export class DataPointIndoorMapService {
   async loadMarkersForLevels(
     levels: MapConfigurationLevel[]
   ): Promise<IManagedObject[][]> {
+    console.log("Loading markers for levels:", levels);
     if (!levels || levels.length === 0) {
       return [];
     }
 
     const promises: Promise<IManagedObject[]>[] = [];
-    levels.forEach((level) => promises.push(this.loadMarkers(level.markers)));
+    levels.forEach((level) => promises.push(this.loadMarkers(level?.markers?.map(marker => marker.id))));
 
     return Promise.all(promises);
   }
 
   async loadMarkers(markerIds: string[]): Promise<IManagedObject[]> {
+    
+    console.log("Loading markers for IDs:", markerIds);
+
     if (!markerIds || markerIds.length === 0) {
       return [];
     }
@@ -188,6 +292,8 @@ export class DataPointIndoorMapService {
     const response = await this.inventoryService.listQuery(query, {
       pageSize: 2000,
     });
+
+    console.log("Loaded markers:", response.data);
     return response.data;
   }
 
@@ -390,5 +496,31 @@ export class DataPointIndoorMapService {
 
   private hasDatapoint(m: IMeasurement, datapoint: Datapoint) {
     return has(m, `${datapoint.fragment}.${datapoint.series}`);
+  }
+
+  async createOrUpdateBuilding(
+    selectedBuilding: MapConfiguration | undefined
+  ): Promise<MapConfiguration | undefined> {
+    console.log("createOrUpdateBuilding", selectedBuilding);
+    if (!selectedBuilding) {
+      throw new Error("No building configuration provided");
+    }
+    if (selectedBuilding.id) {
+      // Update existing building
+      const { data } = await this.inventoryService.update(selectedBuilding);
+      if (isMapConfigutaration(data)) {
+        this.alertService.success("Building updated successfully");
+        return data;
+      }
+      return undefined;
+    } else {
+      // Create new building
+      const { data } = await this.inventoryService.create(selectedBuilding);
+      if (isMapConfigutaration(data)) {
+        this.alertService.success("Building created successfully");
+        return data;
+      }
+      return undefined;
+    }
   }
 }

@@ -14,7 +14,7 @@ import {
 } from "@angular/core";
 import { CoreModule } from "@c8y/ngx-components";
 import type * as L from "leaflet";
-import { MarkerManagedObject } from "../../../data-point-indoor-map.model";
+import { MarkerManagedObject } from "../../../../models/data-point-indoor-map.model";
 
 // Define the structure of the position data being emitted
 interface PositionData {
@@ -68,6 +68,7 @@ export class MoveMarkerMapComponent
     
     // Update marker position or existence when the item changes
     if (changes["item"] || (this.map && this.marker)) {
+      console.log(changes["item"]);
         await this.updateMarkerPosition(changes);
     }
   }

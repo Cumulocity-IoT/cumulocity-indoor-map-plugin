@@ -14,8 +14,8 @@ import {
   ElementRef,
 } from "@angular/core";
 import * as L from "leaflet";
-import "@geoman-io/leaflet-geoman-free";
-import { GPSCoordinates } from "../../data-point-indoor-map.model";
+import "leaflet-draw";
+import { GPSCoordinates } from "../../../models/data-point-indoor-map.model"; // Assuming correct path
 import { BsModalRef } from "ngx-bootstrap/modal";
 
 @Component({

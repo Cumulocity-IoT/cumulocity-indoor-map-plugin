@@ -17,7 +17,7 @@
  */
 import { Component, Input, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { DatapointPopup } from '../../data-point-indoor-map.model';
+import { DatapointPopup } from '../../../models/data-point-indoor-map.model';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subject } from 'rxjs';
 

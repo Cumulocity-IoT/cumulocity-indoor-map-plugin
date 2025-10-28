@@ -17,20 +17,22 @@
         Show Zones
       </label>
     </div>
-    <div class="c8y-select-wrapper">
-      <select
-        class="form-control"
-        [(ngModel)]="currentFloorLevel"
-        (ngModelChange)="onLevelChanged()"
-      >
-        <option
-          *ngFor="let level of building?.levels; let i = index"
-          value="{{ i }}"
-          title="{{ level.name }}"
+    <div class="map-legend" *ngIf="(building?.levels?.length || 0) > 1">
+      <div class="c8y-select-wrapper">
+        <select
+          class="form-control"
+          [(ngModel)]="currentFloorLevel"
+          (ngModelChange)="onLevelChanged()"
         >
-          {{ level.name }}
-        </option>
-      </select>
+          <option
+            *ngFor="let level of building?.levels; let i = index"
+            value="{{ i }}"
+            title="{{ level.name }}"
+          >
+            {{ level.name }}
+          </option>
+        </select>
+      </div>
     </div>
   </div>
 </div>

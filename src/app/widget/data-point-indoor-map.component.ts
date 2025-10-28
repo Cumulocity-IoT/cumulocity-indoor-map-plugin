@@ -26,33 +26,26 @@ import {
   ViewChild,
   ViewEncapsulation,
 } from "@angular/core";
-import { IEvent, IManagedObject } from "@c8y/client";
+import { IManagedObject } from "@c8y/client";
 import {
-  Datapoint,
   MapConfiguration,
   MapConfigurationLevel,
   MarkerManagedObject,
   Measurement,
-  Threshold,
   WidgetConfiguration,
-  ZoneGeometry,
-} from "./data-point-indoor-map.model";
-import { DataPointIndoorMapService } from "./data-point-indoor-map.service";
+} from "../models/data-point-indoor-map.model";
 import type * as L from "leaflet";
 import { MeasurementRealtimeService } from "@c8y/ngx-components";
 import { fromEvent, Subscription, takeUntil } from "rxjs";
 import { EventPollingService } from "./polling/event-polling.service";
 import { get } from "lodash";
+import { BuildingService } from "../services/building.service";
 
 @Component({
   selector: "data-point-indoor-map",
   templateUrl: "data-point-indoor-map.component.html",
   styleUrls: ["./data-point-indoor-map.component.less"],
-  providers: [
-    DataPointIndoorMapService,
-    MeasurementRealtimeService,
-    EventPollingService,
-  ],
+  providers: [MeasurementRealtimeService, EventPollingService, BuildingService],
   encapsulation: ViewEncapsulation.None,
 })
 export class DataPointIndoorMapComponent
@@ -62,12 +55,12 @@ export class DataPointIndoorMapComponent
   @ViewChild("IndoorDataPointMap", { read: ElementRef, static: true })
   mapReference!: ElementRef;
 
+  building?: MapConfiguration;
+
   private readonly MARKER_DEFAULT_COLOR = "#1776BF";
   private readonly KEY_LATEST_MEASUREMENT = "latestPrimaryMeasurement";
   private readonly KEY_MEASUREMENTS = "measurements";
   private readonly KEY_MAP_MARKER_INSTANCE = "mapMarkerInstance";
-  private readonly KEY_MAP_MARKER_POPUP_INSTANCE = "mapMarkerPopupInstance";
-  private readonly DEFAULT_ZOOM_LEVEL = 0;
 
   currentFloorLevel = 0;
   currentLevel?: MapConfigurationLevel;
@@ -75,12 +68,9 @@ export class DataPointIndoorMapComponent
   private markerManagedObjectsForFloorLevel: {
     [deviceId: string]: MarkerManagedObject;
   }[] = [];
-  private primaryMeasurements = new Map<string, Measurement>();
-  private primaryEvents = new Map<string, IEvent>();
 
   leaf!: typeof L;
   map?: L.Map;
-  building?: MapConfiguration;
   measurementReceivedSub?: Subscription;
   primaryMeasurementReceivedSub?: Subscription;
   eventThresholdSub?: Subscription;
@@ -94,29 +84,31 @@ export class DataPointIndoorMapComponent
 
   destroy$ = new EventEmitter<void>();
 
-  constructor(
-    private mapService: DataPointIndoorMapService,
-    private eventPollingService: EventPollingService
-  ) {}
+  constructor(private buildingService: BuildingService) {}
 
   async ngOnInit() {
-    console.log("this.config,", this.config);
+    console.log("this.config,", this.config.buildingId);
 
     this.leaf = await import("leaflet");
   }
 
   async ngAfterViewInit(): Promise<void> {
     this.isLoading = true;
-    this.building = await this.loadMapConfiguration();
-    await this.loadManagedObjectsForMarkers(this.building);
-    const level = this.currentFloorLevel;
-    await this.loadLatestPrimaryMeasurementForMarkers(level);
-    this.initMeasurementUpdates(level);
-    this.isLoading = false;
-    this.map = this.initMap(this.building, level);
-    this.initMarkers(this.map, level);
+    if (this.config?.buildingId) {
+      this.building = await this.loadMapConfiguration();
+      console.log("this.building", this.building);
+      await this.loadManagedObjectsForMarkers(this.building);
+      const level = this.currentFloorLevel;
+      await this.loadLatestPrimaryMeasurementForMarkers(level);
+      this.initMeasurementUpdates(level);
+      this.isLoading = false;
+      this.map = this.initMap(this.building, level);
+      this.initMarkers(this.map, level);
+    } else {
+      this.isLoading = false;
+      // Optionally handle the error case here
+    }
     // this.initEventUpdates(level);
-    this.renderLegend(this.map);
   }
 
   ngOnDestroy(): void {
@@ -132,7 +124,7 @@ export class DataPointIndoorMapComponent
   async onLevelChanged() {
     this.isLoading = true;
     const level = this.currentFloorLevel;
-    this.mapService.unsubscribeAllMeasurements();
+    this.buildingService.unsubscribeAllMeasurements();
     if (this.eventThresholdSub) {
       this.eventThresholdSub.unsubscribe();
     }
@@ -150,8 +142,8 @@ export class DataPointIndoorMapComponent
    * Load the map configuration which has been assigned to this widget.
    */
   private async loadMapConfiguration() {
-    return this.mapService.loadMapConfigurationWithImages(
-      this.config.mapConfigurationId
+    return this.buildingService.loadMapConfigurationWithImages(
+      this.config.buildingId
     );
   }
 
@@ -168,8 +160,11 @@ export class DataPointIndoorMapComponent
       return;
     }
 
+    console.log("Building levels:", building.levels);
+
     const managedObjectsForFloorLevels =
-      await this.mapService.loadMarkersForLevels(building.levels);
+      await this.buildingService.loadMarkersForLevels(building.levels);
+    console.log("managedObjectsForFloorLevels:", managedObjectsForFloorLevels);
     managedObjectsForFloorLevels.forEach(
       (managedObjectsForFloorLevel, index) => {
         let managedObjectsMap: { [deviceId: string]: IManagedObject } = {};
@@ -179,6 +174,10 @@ export class DataPointIndoorMapComponent
         );
         this.markerManagedObjectsForFloorLevel[index] = managedObjectsMap;
       }
+    );
+    console.log(
+      "Loaded managed objects for floor levels:",
+      this.markerManagedObjectsForFloorLevel
     );
   }
 
@@ -198,20 +197,6 @@ export class DataPointIndoorMapComponent
     const currentVisibleMarkerManagedObjects =
       this.markerManagedObjectsForFloorLevel[level];
     const deviceIds = Object.keys(currentVisibleMarkerManagedObjects);
-
-    const measurements = await this.mapService.loadLatestMeasurements(
-      deviceIds,
-      this.config.measurement.fragment,
-      this.config.measurement.series
-    );
-
-    deviceIds.forEach((deviceId, index) => {
-      const measurement = measurements[index];
-      if (measurement) {
-        const managedObject = currentVisibleMarkerManagedObjects[deviceId];
-        managedObject[this.KEY_LATEST_MEASUREMENT] = measurement;
-      }
-    });
   }
 
   private initMeasurementUpdates(level: number): void {
@@ -222,108 +207,6 @@ export class DataPointIndoorMapComponent
     //this.subscribeForMeasurementUpdates(level);
     //this.listenToPrimaryMeasurementUpdates(level);
     this.listenToConfiguredMeasurementUpdates(level);
-  }
-
-  /* private initEventUpdates(level: number): void {
-    if (!this.isMarkersAvailableForCurrentFloorLevel(level)) {
-      return;
-    }
-    const thresholds = this.config.legend?.thresholds ?? [];
-    if (!thresholds.length) {
-      return;
-    }
-    const deviceIds: string[] = Object.keys(
-      this.markerManagedObjectsForFloorLevel[level]
-    );
-    this.eventThresholdSub = this.eventPollingService
-      .startPolling(deviceIds, thresholds)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((update) => {
-        this.primaryEvents.set(update.deviceId, update.event);
-        this.updateMarkerColor(update.deviceId);
-      });
-  } */
-
-  /**
-   * subscribe for measurements (primary and configured measurements) for each device
-   * which is available on the current floor level
-   */
-  /*   private subscribeForMeasurementUpdates(level: number): void {
-    const deviceIds: string[] = Object.keys(
-      this.markerManagedObjectsForFloorLevel[level]
-    );
-    const datapoints: Datapoint[] =
-      this.config.datapointsPopup?.map(
-        (datapointPopup) => datapointPopup.measurement
-      ) ?? [];
-    this.mapService.subscribeForMeasurements(
-      deviceIds,
-      this.config.measurement,
-      datapoints
-    );
-  } */
-
-  /**
-   * subscribe for primary measurements updates. For the received measurement its value
-   * is used to color the map marker instance correctly based on the legend.
-   */
-  /*  private listenToPrimaryMeasurementUpdates(level: number): void {
-    this.primaryMeasurementReceivedSub =
-      this.mapService.primaryMeasurementReceived$
-        .pipe(takeUntil(this.destroy$))
-        .subscribe(({ deviceId, measurement }) => {
-          this.primaryMeasurements.set(deviceId, measurement);
-          this.updateMarkerColor(deviceId);
-        });
-  }
- */
-
-  private updateMarkerColor(deviceId: string) {
-    if (!this.config.legend?.thresholds?.length) {
-      return;
-    }
-    const thresholds = this.config.legend?.thresholds;
-    const primaryMeasurement = this.primaryMeasurements.get(deviceId);
-    const measurementThresholds = thresholds.filter(
-      (t) => t.type === "measurement"
-    );
-    const primaryEvent = this.primaryEvents.get(deviceId);
-    const eventThresholds = thresholds.filter((t) => t.type === "event");
-    let measurementThresholdMatch: Threshold | undefined = undefined;
-    let eventThresholdMatch: Threshold | undefined = undefined;
-
-    if (primaryMeasurement) {
-      measurementThresholdMatch = measurementThresholds.find(
-        (threshold) =>
-          primaryMeasurement.value >= threshold.min &&
-          primaryMeasurement.value <= threshold.max
-      );
-    }
-    if (primaryEvent) {
-      eventThresholdMatch = eventThresholds.find(
-        (threshold) =>
-          threshold.text === primaryEvent.text &&
-          threshold.eventType === primaryEvent.type
-      );
-    }
-
-    if (measurementThresholdMatch && !eventThresholdMatch) {
-      this.updateMarkerWithColor(deviceId, measurementThresholdMatch.color);
-    } else if (!measurementThresholdMatch && eventThresholdMatch) {
-      this.updateMarkerWithColor(deviceId, eventThresholdMatch.color);
-    } else if (measurementThresholdMatch && eventThresholdMatch) {
-      const measurementThresholdMatchIndex = thresholds.indexOf(
-        measurementThresholdMatch
-      );
-      const eventThresholdMatchIndex = thresholds.indexOf(eventThresholdMatch);
-      if (measurementThresholdMatchIndex < eventThresholdMatchIndex) {
-        this.updateMarkerWithColor(deviceId, measurementThresholdMatch.color);
-      } else {
-        this.updateMarkerWithColor(deviceId, eventThresholdMatch.color);
-      }
-    } else if (!measurementThresholdMatch && !eventThresholdMatch) {
-      this.updateMarkerWithColor(deviceId, this.MARKER_DEFAULT_COLOR);
-    }
   }
 
   private updateMarkerWithColor(deviceId: string, fillColor: string) {
@@ -349,7 +232,7 @@ export class DataPointIndoorMapComponent
    * received measurements
    */
   private listenToConfiguredMeasurementUpdates(level: number) {
-    this.measurementReceivedSub = this.mapService.measurementReceived$
+    this.measurementReceivedSub = this.buildingService.measurementReceived$
       .pipe(takeUntil(this.destroy$))
       .subscribe(({ deviceId, measurement }) => {
         const datapoint = `${measurement.datapoint.fragment}.${measurement.datapoint.series}`;
@@ -366,16 +249,6 @@ export class DataPointIndoorMapComponent
             : {},
           { [datapoint]: measurement }
         );
-
-        const popup = managedObject[this.KEY_MAP_MARKER_POPUP_INSTANCE];
-        if (popup) {
-          popup.setContent(
-            this.getPopupContent(
-              managedObject,
-              Object.values(managedObject[this.KEY_MEASUREMENTS])
-            )
-          );
-        }
       });
   }
 
@@ -394,7 +267,7 @@ export class DataPointIndoorMapComponent
   private calculateBounds(): L.LatLngBounds | null {
     if (!!this.config.coordinates) {
       const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
-        this.config.coordinates;
+        this.building.coordinates;
 
       if (!topLeftLat || !topLeftLng || !bottomRightLat || !bottomRightLng) {
         console.error(
@@ -431,7 +304,7 @@ export class DataPointIndoorMapComponent
       })
       .addTo(map);
 
-    if (currentMapConfigurationLevel.blob) {
+    if (currentMapConfigurationLevel?.blob) {
       const imgBlobURL = URL.createObjectURL(currentMapConfigurationLevel.blob);
       this.leaf
         .imageOverlay(imgBlobURL, bounds, {
@@ -440,8 +313,8 @@ export class DataPointIndoorMapComponent
         })
         .addTo(map);
 
-      const zoom = this.config.mapSettings.zoomLevel;
-      const center = this.getCenterCoordinates(this.config.coordinates);
+      const zoom = this.building?.zoomLevel;
+      const center = this.getCenterCoordinates(this.building?.coordinates);
 
       map.setView(center, zoom);
       map.fitBounds(bounds);
@@ -467,7 +340,7 @@ export class DataPointIndoorMapComponent
 
   private onDragEnd() {
     localStorage.setItem(
-      `${this.config.mapConfigurationId}-${this.currentFloorLevel}-center`,
+      `${this.config.buildingId}-${this.currentFloorLevel}-center`,
       JSON.stringify(this.map!.getCenter())
     );
   }
@@ -610,8 +483,8 @@ export class DataPointIndoorMapComponent
       });
       imageOverlay.addTo(map);
 
-      const zoom = this.config.mapSettings.zoomLevel;
-      const center = this.getCenterCoordinates(this.config.coordinates);
+      const zoom = this.building?.zoomLevel;
+      const center = this.getCenterCoordinates(this.building?.coordinates);
 
       map.setView(center, zoom);
       map.fitBounds(imageOverlay.getBounds());
@@ -640,9 +513,17 @@ export class DataPointIndoorMapComponent
       return;
     }
 
+    console.log("Initializing markers for level:", level);
+    console.log(this.markerManagedObjectsForFloorLevel);
+    console.log(
+      "Marker managed objects:",
+      this.markerManagedObjectsForFloorLevel[level]
+    );
+
     const markerManagedObjects = Object.values(
       this.markerManagedObjectsForFloorLevel[level]
     );
+
     this.addMarkersToLevel(markerManagedObjects, map);
   }
 
@@ -659,6 +540,7 @@ export class DataPointIndoorMapComponent
     map: L.Map
   ): void {
     const markersLayer = this.leaf.featureGroup().addTo(map);
+    console.log("Adding markers to level:", markerManagedObjects);
     markerManagedObjects.forEach((markerManagedObject) => {
       // if (!this.isGeolocationAvailable(markerManagedObject)) {
       //   return;
@@ -671,52 +553,9 @@ export class DataPointIndoorMapComponent
         this.createCircleMarkerInstance(markerManagedObject).addTo(
           markersLayer
         );
-      circleMarkerInstance.on("click", (event) => {
-        // load measurements for all configured datapoints
-        if (!markerManagedObject[this.KEY_MEASUREMENTS]) {
-          this.loadLatestMeasurements(markerManagedObject).then(() =>
-            this.updatePopupInstanceContent(markerManagedObject)
-          );
-        }
-
-        this.openPopupForMarkerInstance(
-          markerManagedObject,
-          event.target._latlng
-        );
-      });
 
       markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] = circleMarkerInstance;
     });
-  }
-
-  /**
-   * render the legend of the thresholds in case they have been defined in the configuration for the widget
-   */
-  private renderLegend(map: L.Map): void {
-    if (
-      !this.config.legend ||
-      !this.config.legend.thresholds ||
-      this.config.legend.thresholds.length === 0
-    ) {
-      return;
-    }
-
-    const legend = this.leaf.control.attribution({ position: "bottomleft" });
-    legend.onAdd = () => {
-      const div = this.leaf.DomUtil.create("div", "legend");
-
-      if (this.config?.legend?.title) {
-        div.innerHTML += `<h4>${this.config.legend.title}</h4>`;
-      }
-
-      this.config?.legend?.thresholds?.forEach((threshold) => {
-        div.innerHTML += `<div class="entry"><i style="background: ${threshold.color}"></i><span>${threshold.label}</span ></div>`;
-      });
-
-      return div;
-    };
-
-    legend.addTo(map);
   }
 
   /**
@@ -761,159 +600,6 @@ export class DataPointIndoorMapComponent
   }
 
   /**
-   * display a popup if user clicked on a marker instance
-   *
-   * @param managedObject to which the popup should be related to
-   * @param geolocation at which the popup should be displayed
-   */
-  private openPopupForMarkerInstance(
-    managedObject: IManagedObject,
-    geolocation: any
-  ) {
-    const popup = this.createPopupInstance(managedObject, geolocation);
-    popup.openOn(this.map);
-    managedObject[this.KEY_MAP_MARKER_POPUP_INSTANCE] = popup;
-  }
-
-  /**
-   * creates the popup instance
-   *
-   * @param managedObject to get name and measurements which should be displayed
-   * @param geolocation at which the popup should be displayed
-   * @returns instance of popup
-   */
-  private createPopupInstance(
-    managedObject: IManagedObject,
-    geolocation: any
-  ): any {
-    const popup = this.leaf.popup({
-      closeButton: false,
-      autoClose: true,
-      className: "indoor-map-popup",
-    });
-    popup
-      .setLatLng(geolocation)
-      .setContent(
-        this.getPopupContent(
-          managedObject,
-          !!managedObject[this.KEY_MEASUREMENTS]
-            ? Object.values(managedObject[this.KEY_MEASUREMENTS])
-            : []
-        )
-      );
-
-    return popup;
-  }
-
-  /**
-   * Updates the content of a popup assigned to the given managed object
-   *
-   * @param managedObject whose popup should be updated
-   */
-  private updatePopupInstanceContent(managedObject: IManagedObject): void {
-    const popupInstance = managedObject[this.KEY_MAP_MARKER_POPUP_INSTANCE];
-
-    if (!popupInstance) {
-      return;
-    }
-
-    popupInstance.setContent(
-      this.getPopupContent(
-        managedObject,
-        !!managedObject[this.KEY_MEASUREMENTS]
-          ? Object.values(managedObject[this.KEY_MEASUREMENTS])
-          : []
-      )
-    );
-  }
-
-  /**
-   * create an html string which describes the content of a popup instance.
-   * It includes the device name and the measurements.
-   *
-   * @param deviceName used for the headline
-   * @param measurements to display in the popup
-   * @returns html string
-   */
-  private getPopupContent(
-    managedObject: IManagedObject,
-    measurements?: Measurement[]
-  ): string {
-    let contentString = this.getPopupHeader(managedObject);
-
-    if (!measurements || measurements.length === 0) {
-      contentString += `<p style="text-align:center">Type : ${managedObject["type"]}</p>`;
-      return contentString;
-    }
-
-    measurements.forEach((measurement) => {
-      const datapointConfig = this.config.datapointsPopup?.find(
-        (datapoint) =>
-          `${datapoint.measurement.fragment}.${datapoint.measurement.series}` ===
-          `${measurement.datapoint.fragment}.${measurement.datapoint.series}`
-      );
-      const measurementString = measurement.unit
-        ? `${measurement.value}${measurement.unit}`
-        : `${measurement.value}`;
-      contentString += `<p>${datapointConfig?.label}: <span class="measurement-value">${measurementString}</span></p>`;
-    });
-
-    return contentString;
-  }
-
-  /**
-   * returns the header for the popup. In case the device has a dashboard id assigned to
-   * it, the dashboard will linked in the header.
-   *
-   * @param managedObject for which the popup should be created
-   * @returns header as an html string
-   */
-  private getPopupHeader(managedObject: IManagedObject): string {
-    // if (!has(managedObject, 'dashboardId')) {
-    //   return `<h5>${managedObject['name']}</h5><hr />`;
-    // }
-
-    return `<a href="#/device/${managedObject.id}"><h5>${managedObject["name"]}</h5></a><hr />`;
-  }
-
-  /**
-   * Load the latest measurement based on the configured popup measurements for a
-   * given managedObject. The measurements will be directly stored on the
-   * managed object as a custom property.
-   *
-   * @param managedObject
-   */
-  private async loadLatestMeasurements(
-    managedObject: IManagedObject
-  ): Promise<void> {
-    const datapoints: Datapoint[] =
-      this.config.datapointsPopup?.map(
-        (datapointPopup) => datapointPopup.measurement
-      ) ?? [];
-
-    const promises = datapoints.map((datapoint) =>
-      this.mapService.loadLatestMeasurement(
-        managedObject.id,
-        datapoint.fragment,
-        datapoint.series
-      )
-    );
-    const measurements = await Promise.all(promises);
-
-    measurements.forEach((measurement, index) => {
-      if (measurement) {
-        const datapoint = `${datapoints[index].fragment}.${datapoints[index].series}`;
-        managedObject[this.KEY_MEASUREMENTS] = Object.assign(
-          !!managedObject[this.KEY_MEASUREMENTS]
-            ? managedObject[this.KEY_MEASUREMENTS]
-            : {},
-          { [datapoint]: measurement }
-        );
-      }
-    });
-  }
-
-  /**
    * get the background color based on the thresholds which have been defined
    * in the widgets configuration. If there aren't any thresholds return the
    * default color
@@ -922,14 +608,6 @@ export class DataPointIndoorMapComponent
    * @returns color as hex string
    */
   private getBackgroundColor(measurement: Measurement | undefined): string {
-    if (
-      !this.config.legend ||
-      !this.config.legend.thresholds ||
-      this.config.legend.thresholds.length === 0
-    ) {
-      return this.MARKER_DEFAULT_COLOR;
-    }
-
     if (!measurement) {
       return this.MARKER_DEFAULT_COLOR;
     }
