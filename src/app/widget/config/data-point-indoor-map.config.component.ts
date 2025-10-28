@@ -6,21 +6,16 @@ import {
   OnBeforeSave,
 } from "@c8y/ngx-components";
 import { TypeaheadMatch } from "ngx-bootstrap/typeahead";
-import { ManagedDatapointsPopupModalComponent } from "./managed-datapoints-popup-modal/managed-datapoints-popup-modal.component";
-import { isNil } from "lodash";
 import { Observable } from "rxjs";
-import { CdkDragDrop, moveItemInArray } from "@angular/cdk/drag-drop";
 import { AssignLocationModalComponent } from "./map-config-modal/assign-locations-modal/assign-locations-modal.component";
 import { GPSComponent } from "./select-co-ordinates/gps.component";
 import { ZonesComponent } from "./zones-creation/zones-creation.component";
-// Assuming you have an EditLocationModalComponent to host the map
-// import { EditLocationModalComponent } from "./edit-location-modal/edit-location-modal.component";
 import { AssignDevicesModalComponent } from "./map-config-modal/assign-devices-modal/assign-devices-modal.component";
 import { BuildingService } from "../../services/building.service";
 import { EventPollingService } from "../polling/event-polling.service";
 import { isEmpty } from "lodash";
 import { FloorConfigModalComponent } from "./floor-configuration-modal/floor-config-modal.component";
-import { WidgetConfiguration } from "../../models/data-point-indoor-map.model";
+import { MapConfiguration, MapConfigurationLevel, WidgetConfiguration } from "../../models/data-point-indoor-map.model";
 
 @Component({
   selector: "data-point-indoor-map-configuration",
@@ -178,46 +173,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       });
   }
 
-  onDrop(event: CdkDragDrop<Threshold[]>) {
-    moveItemInArray(
-      event.container.data,
-      event.previousIndex,
-      event.currentIndex
-    );
-  }
-
-  onDeleteMapConfiguration(): void {
-    this.configService
-      .deleteMapConfiguration(this.selectedMapConfigurationId!)
-      .then((success) => {
-        if (success) {
-          this.mapConfigurations = this.mapConfigurations.filter(
-            (mapConfiguration) =>
-              mapConfiguration.id !== this.selectedMapConfigurationId
-          );
-          this.selectedMapConfigurationId = undefined;
-          this.selectedBuilding = undefined;
-          this.updateDataPointSeries();
-        }
-      });
-  }
-
-  onMapConfigurationChanged(): void {
-    const selectedMapConfiguration = this.mapConfigurations.find(
-      (mapConfiguration) =>
-        mapConfiguration.id === this.selectedMapConfigurationId
-    );
-    if (this.selectedMapConfigurationId && selectedMapConfiguration) {
-      this.selectedBuilding = selectedMapConfiguration;
-      this.config.mapConfigurationId = this.selectedMapConfigurationId;
-
-      // Update config coordinates if building has stored coordinates
-      /*  if (selectedMapConfiguration.coordinates) {
-        this.config.coordinates = selectedMapConfiguration.coordinates;
-      } */
-    }
-    this.updateDataPointSeries();
-  }
 
   onPrimaryMeasurementChanged(): void {
     const measurement: string[] = this.selectedDataPoint!.split(".");
@@ -227,35 +182,17 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     };
   }
 
-  onUpdateDatapointsButtonClicked(): void {
-    this.displayUpdateDatapointsPopupModal();
-  }
 
-  // 🌟 NEW: Placeholder for assigning devices to the current building/levels
   onAssignDevicesButtonClicked(): void {
     if (!this.selectedBuilding) return;
     console.log(
       "Opening modal to assign devices to building:",
       this.selectedBuilding.name
     );
-
-    // Implement modal logic here (e.g., this.modalService.show(AssignDevicesModalComponent))
   }
 
-  // 🌟 NEW: Placeholder for editing a specific device's location
-  onEditDeviceLocation(): void {
-    if (!this.selectedBuilding) return;
-    console.log(
-      "Opening modal to select a device and edit its location on the map."
-    );
 
-    const modalRef = this.modalService.show(AssignLocationModalComponent, {
-      initialState: { building: this.selectedBuilding },
-      class: "modal-lg",
-    });
-  }
 
-  // 🌟 NEW: Placeholder for editing a specific device's location
   openMapBoundaryModal(): void {
     if (!this.selectedBuilding) return;
     console.log(
@@ -302,34 +239,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     });
   }
 
-  private initConfiguration(): void {
-    if (
-      !!this.config &&
-      this.config.mapConfigurationId &&
-      this.config.measurement
-    ) {
-      if (!this.config?.mapSettings?.rotationAngle) {
-        this.config.mapSettings.rotationAngle = this.DEFAULT_ROTATION_ANGLE;
-      }
-      return;
-    }
-
-    this.config = Object.assign(this.config, {
-      mapConfigurationId: "",
-      measurement: {
-        fragment: "",
-        series: "",
-      },
-      mapSettings: {
-        zoomLevel: this.DEFAULT_ZOOM_LEVEL,
-        rotationAngle: 10,
-      },
-      coordinates: {},
-      legend: {
-        title: "",
-        thresholds: [],
-      },
-      datapointsPopup: [],
+  
   onEditDeviceLocation(): void {
     if (!this.selectedBuilding) return;
     this.modalService.show(AssignLocationModalComponent, {
@@ -352,17 +262,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     );
   }
 
-  openMapBoundaryModal(): void {
-    if (!this.selectedBuilding) return;
-    const modalRef = this.modalService.show(GPSComponent, {
-      initialState: { coordinates: this.selectedBuilding.coordinates } as any,
-      class: "modal-lg",
-    });
-
-    modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
-      this.onGpsConfigChange(newConfig);
-    });
-  }
 
   openFloorConfigurationModal(): void {
     if (!this.selectedBuilding) return;
@@ -430,7 +329,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       return false;
     } // Optionally, persist the configuration using the service
 
-    const coords = config.coordinates as any;
+    const coords = config?.coordinates as any;
     const hasValidCorners =
       coords?.placementMode === "corners" &&
       coords.topLeftLat &&

@@ -15,12 +15,9 @@ import {
 } from "@angular/core";
 import * as L from "leaflet";
 import "@geoman-io/leaflet-geoman-free";
-import {
-  GPSConfigWithImage,
-  GPSCoordinates,
-} from "../../data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
 import { InventoryBinaryService } from "@c8y/client";
+import { GPSConfigWithImage, GPSCoordinates } from "../../../models/data-point-indoor-map.model";
 
 @Component({
   selector: "c8y-zone-creation-component",

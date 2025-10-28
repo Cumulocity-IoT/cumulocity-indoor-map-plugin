@@ -265,7 +265,7 @@ export class DataPointIndoorMapComponent
   }
 
   private calculateBounds(): L.LatLngBounds | null {
-    if (!!this.config.coordinates) {
+    if (!!this.config.coordinates && this.building?.coordinates) {
       const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
         this.building.coordinates;
 
