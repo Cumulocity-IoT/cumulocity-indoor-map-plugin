@@ -267,7 +267,7 @@ export class BuildingService {
     }
 
     const promises: Promise<IManagedObject[]>[] = [];
-    levels.forEach((level) => promises.push(this.loadMarkers(level.markers.map(marker => marker.id))));
+    levels.forEach((level) => promises.push(this.loadMarkers(level?.markers?.map(marker => marker.id))));
 
     return Promise.all(promises);
   }

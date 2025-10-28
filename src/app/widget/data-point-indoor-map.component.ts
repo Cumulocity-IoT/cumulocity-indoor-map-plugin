@@ -154,7 +154,7 @@ export class DataPointIndoorMapComponent
       return;
     }
 
-    console.log(building.levels);
+    console.log("Building levels:", building.levels);
 
     const managedObjectsForFloorLevels =
       await this.buildingService.loadMarkersForLevels(building.levels);
@@ -352,7 +352,7 @@ export class DataPointIndoorMapComponent
       })
       .addTo(map);
 
-    if (currentMapConfigurationLevel.blob) {
+    if (currentMapConfigurationLevel?.blob) {
       const imgBlobURL = URL.createObjectURL(currentMapConfigurationLevel.blob);
       this.leaf
         .imageOverlay(imgBlobURL, bounds, {

@@ -40,9 +40,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   dataPointSeries: string[] = [];
 
   selectedBuilding?: MapConfiguration;
-  selectedMapConfigurationId?: string;
+  selectedMapConfigurationId?: string; /** 🔹 For typeahead binding */
 
-  /** 🔹 For typeahead binding */
   mapConfigInput = "";
   showCreateOption = false;
 
@@ -64,9 +63,27 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   ngOnInit() {
     this.initMapConfigurations();
-  }
+  } /** 🔹 Prüft, ob Bauwerksgrenzen konfiguriert sind (prüft auf mindestens eine Koordinate) */
 
-  /** 🔹 Called whenever user types into the typeahead input */
+  hasBuildingBoundaries(): boolean {
+    if (!this.selectedBuilding?.coordinates) {
+      return false;
+    } // Prüft, ob mindestens eine der 4 Koordinaten vorhanden ist, um Konfiguration anzuzeigen
+    return (
+      !!this.selectedBuilding.coordinates.topLeftLat ||
+      !!this.selectedBuilding.coordinates.topLeftLng ||
+      !!this.selectedBuilding.coordinates.bottomRightLat ||
+      !!this.selectedBuilding.coordinates.bottomRightLng
+    );
+  } /** 🔹 Prüft, ob Stockwerke konfiguriert sind (prüft auf mindestens ein Level) */
+
+  hasFloorConfiguration(): boolean {
+    return (
+      !!this.selectedBuilding?.levels && this.selectedBuilding.levels.length > 0
+    );
+  } 
+
+
   onMapConfigurationInputChange(value: string): void {
     this.mapConfigInput = value;
 
@@ -91,9 +108,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       this.selectedMapConfigurationId = undefined;
       this.showCreateOption = true;
     }
-  }
+  } /** 🔹 When user selects an existing item from typeahead suggestions */
 
-  /** 🔹 When user selects an existing item from typeahead suggestions */
   onMapConfigurationSelected(event: TypeaheadMatch): void {
     const selected: MapConfiguration = event.item;
     this.mapConfigInput = selected.name;
@@ -101,9 +117,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     this.selectedBuilding = selected;
     this.showCreateOption = false;
     this.onMapConfigurationChanged();
-  }
+  } /** 🔹 Creates a new configuration when user clicks "Create" */
 
-  /** 🔹 Creates a new configuration when user clicks "Create" */
   createNewMapConfiguration(): void {
     if (!this.mapConfigInput.trim()) return;
 
@@ -113,18 +128,22 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       coordinates: {},
       location: "",
       assetType: "",
+      zoomLevel: 18,
       levels: [],
       type: "c8y_Building",
     };
 
-    this.mapConfigurations.push(newConfig);
-    this.selectedMapConfigurationId = newConfig.id;
-    this.selectedBuilding = newConfig;
-    this.config.buildingId = newConfig.id ?? "";
+    this.buildingService.createOrUpdateBuilding(newConfig).then((created) => {
+      if (created) {
+        newConfig.id = created.id;
+        this.mapConfigurations.push(newConfig);
+        this.selectedMapConfigurationId = newConfig.id;
+        this.selectedBuilding = newConfig;
+        this.config.buildingId = newConfig.id ?? "";
+      }
+    });
     this.showCreateOption = false;
-  }
-
-  // --- Existing methods below unchanged ---
+  } // --- Existing methods below unchanged ---
 
   async onMapConfigurationChanged(): Promise<void> {
     if (!this.selectedMapConfigurationId) return;
@@ -136,9 +155,9 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
     if (selectedMapConfiguration) {
       this.selectedBuilding =
-        await this.buildingService.loadMapConfigurationWithImages(
+        (await this.buildingService.loadMapConfigurationWithImages(
           selectedMapConfiguration.id!
-        ) as any;
+        )) as any;
       this.config.buildingId = this.selectedMapConfigurationId;
     }
   }
@@ -227,9 +246,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
           (m) => m.id === this.config.buildingId
         );
         this.selectedMapConfigurationId = this.selectedBuilding?.id;
-        this.mapConfigInput = this.selectedBuilding?.name ?? "";
+        this.mapConfigInput = this.selectedBuilding?.name ?? ""; // load full configuration with images only if we have a selected building and a valid id
 
-        // load full configuration with images only if we have a selected building and a valid id
         if (this.selectedBuilding && this.selectedBuilding.id) {
           try {
             const fullConfig =
@@ -237,8 +255,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
                 this.selectedBuilding.id
               );
             this.selectedBuilding = fullConfig;
-            console.log("Loaded full building configuration:", fullConfig);
-            // this.onMapConfigurationChanged();
+            console.log("Loaded full building configuration:", fullConfig); // this.onMapConfigurationChanged();
           } catch {
             // keep existing selectedBuilding on error and still trigger change handling
             this.onMapConfigurationChanged();
@@ -262,9 +279,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     if (isEmpty(this.selectedBuilding?.name)) {
       alert("Please provide a name for the building.");
       return false;
-    }
+    } // Optionally, persist the configuration using the service
 
-    // Optionally, persist the configuration using the service
     return this.buildingService
       .createOrUpdateBuilding(this.selectedBuilding)
       .then(() => {
