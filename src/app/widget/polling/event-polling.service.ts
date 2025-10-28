@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { EventService, IEvent, IManagedObject } from '@c8y/client';
 import { groupBy } from 'lodash';
 import { Observable } from 'rxjs';
-import { Threshold } from '../data-point-indoor-map.model';
+import { Threshold } from '../../models/data-point-indoor-map.model';
 
 const FETCH_INTERVAL = 10_000;
 

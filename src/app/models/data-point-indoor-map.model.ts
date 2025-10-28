@@ -18,17 +18,8 @@
 import { IManagedObject } from "@c8y/client";
 
 export interface WidgetConfiguration {
-  mapConfigurationId: string;
-  measurement: Datapoint;
-  mapSettings: {
-    zoomLevel: number;
-  };
-  legend?: {
-    title: string;
-    thresholds?: Threshold[];
-  };
-  datapointsPopup?: DatapointPopup[];
-  coordinates?: GPSCoordinates;
+  buildingId: string;
+  buildingName: string;
 }
 
 export type Threshold = {
@@ -60,6 +51,7 @@ export interface MapConfiguration {
   id?: string;
   name: string;
   coordinates: GPSCoordinates;
+  zoomLevel?: number;
   location: string;
   assetType: string;
   levels: MapConfigurationLevel[];
@@ -80,15 +72,15 @@ export function isMapConfigutaration(obj: any): obj is MapConfiguration {
 }
 
 export interface MapConfigurationLevel {
+  [x: string]: any;
   name: string;
   /** binary id of the image */
   binaryId?: string;
   /** downloaded image stored as Blob */
   blob?: Blob;
   /** markers ids which reference the corresponding managed object */
-  markers: string[];
-  /** the corresponding managed Object for a marker */
-  markerManagedObjects?: MarkerManagedObject[];
+  markers: { id: string; name: string }[];
+
   imageDetails: {
     dimensions?: { width: number; height: number };
     corners: Array<{ lat: number; lng: number }>;

@@ -1,133 +1,106 @@
-<div class="legend form-block">Building Configuration</div>
+<div class="widget-config-container">
+  <div class="legend form-block">Building / Map Configuration</div>
 
-<div class="input-group m-b-24">
-  <c8y-form-group class="m-b-16">
-    <label>Building/Map Selection</label>
-    <div class="c8y-select-wrapper">
-      <select
-        name="map-configuration"
-        placeholder="Select Map Configuration"
-        [(ngModel)]="selectedMapConfigurationId"
-        (ngModelChange)="onMapConfigurationChanged()"
+  <div class="input-group m-b-24">
+    <c8y-form-group class="m-b-16">
+      <label for="mapConfigSelect">Building Selection</label>
+
+      <input
+        id="mapConfigSelect"
+        [(ngModel)]="mapConfigInput"
+        [typeahead]="mapConfigurations"
+        typeaheadOptionField="name"
+        (typeaheadOnSelect)="onMapConfigurationSelected($event)"
+        (ngModelChange)="onMapConfigurationInputChange($event)"
+        placeholder="Start typing to select or create new"
+        class="form-control"
+      />
+
+      <small class="text-muted"
+        >Select an existing configuration or type a new name to create one.</small
       >
-        <option
-          *ngIf="!mapConfigurations || mapConfigurations.length === 0"
-          value=""
-        >
-          No configurations available
-        </option>
-        <option
-          *ngFor="let config of mapConfigurations"
-          value="{{ config.id }}"
-          [title]="config.name"
-        >
-          {{ config.name }}
-        </option>
-      </select>
+    </c8y-form-group>
+
+    <!-- Show create button when user typed a new name -->
+    <div *ngIf="showCreateOption" class="m-t-16">
+      <button
+        type="button"
+        class="btn btn-primary btn-block"
+        (click)="createNewMapConfiguration()"
+      >
+        <i c8yIcon="plus-circle" class="c8y-icon"></i>
+        Create "<strong>{{ mapConfigInput }}</strong>"
+      </button>
     </div>
-  </c8y-form-group>
-  <div class="input-group-btn m-t-24">
-    <button
-      type="button"
-      class="btn btn-dot text-primary"
-      title="Create new configuration"
-      aria-label="Create new configuration"
-      (click)="onCreateNewMapConfiguration()"
-    >
-      <i c8yIcon="plus-circle" class="c8y-icon"></i>
-    </button>
-    <button
-      *ngIf="selectedMapConfigurationId"
-      type="button"
-      class="btn btn-dot"
-      title="Edit Map Configuration (Image/Bounds)"
-      aria-label="Edit Map Configuration (Image/Bounds)"
-      (click)="onEditMapConfiguration()"
-    >
-      <i c8yIcon="pencil" class="c8y-icon"></i>
-    </button>
-    <button
-      *ngIf="selectedMapConfigurationId"
-      type="button"
-      class="btn btn-dot text-danger"
-      title="Delete configuration"
-      aria-label="Delete configuration"
-      (click)="onDeleteMapConfiguration()"
-    >
-      <i c8yIcon="trash" class="c8y-icon"></i>
-    </button>
+
+    <!-- Show delete button for existing config -->
+    <div class="input-group-btn m-t-24" *ngIf="selectedMapConfigurationId">
+      <button
+        type="button"
+        class="btn btn-dot text-danger"
+        title="Delete configuration"
+        aria-label="Delete configuration"
+        (click)="onDeleteMapConfiguration()"
+      >
+        <i c8yIcon="trash" class="c8y-icon"></i>
+      </button>
+    </div>
   </div>
-</div>
-
-<hr />
-
-<div *ngIf="selectedBuilding">
-  <div class="legend form-block">Map Settings</div>
-
-  <div class="form-group">
-    <label for="buildingName">Building Name</label>
-    <input
-      type="text"
-      class="form-control"
-      [(ngModel)]="selectedBuilding.name"
-      placeholder="Enter Building Name"
-    />
-  </div>
-
-  <c8y-form-group>
-    <label>Initial Zoom Level</label>
-    <input
-      type="number"
-      class="form-control"
-      [(ngModel)]="config.mapSettings.zoomLevel"
-      step="0.25"
-      placeholder="e.g., 14"
-    />
-  </c8y-form-group>
 
   <hr />
 
-  <div class="legend form-block">Map Boundaries</div>
+  <div *ngIf="selectedBuilding">
+    <div class="legend form-block">Map Settings</div>
 
-  <c8y-form-group>
-    <label>Map Boundaries</label>
-    <p class="small">Draw a rectangle on the map to define the image bounds.</p>
-    <button
-      type="button"
-      class="btn btn-default btn-block"
-      (click)="openMapBoundaryModal()"
-    >
-      <i c8yIcon="devices" class="c8y-icon"></i> Draw Map Boundaries
-    </button>
-  </c8y-form-group>
+    <c8y-form-group>
+      <label>Initial Zoom Level</label>
+      <input
+        type="number"
+        class="form-control"
+        [(ngModel)]="selectedBuilding.zoomLevel"
+        step="0.25"
+        placeholder="e.g., 14"
+      />
+    </c8y-form-group>
 
-  <hr />
+    <hr />
 
-  <div class="legend form-block">Device Location Assignment</div>
+    <div class="legend form-block">Building Configuration</div>
 
-  <c8y-form-group>
-    <label>Associate Devices</label>
-    <p class="small">Link physical devices to this map's levels.</p>
-    <button
-      type="button"
-      class="btn btn-default btn-block"
-      (click)="onAssignDevicesButtonClicked()"
-    >
-      <i c8yIcon="devices" class="c8y-icon"></i> Assign Devices to Floors
-    </button>
-  </c8y-form-group>
+    <c8y-form-group>
+      <label>Building Boundaries</label>
+      <p class="small">Draw a rectangle on the map to define the image bounds.</p>
+      <button type="button" class="btn btn-default btn-block" (click)="openMapBoundaryModal()">
+        <i c8yIcon="devices" class="c8y-icon"></i> Draw Map Boundaries
+      </button>
+    </c8y-form-group>
 
-  <c8y-form-group>
-    <label>Edit Device Locations</label>
-    <p class="small">
-      Select a device and set its exact position on the map image.
-    </p>
-    <button
-      type="button"
-      class="btn btn-default btn-block"
-      (click)="onEditDeviceLocation()"
-    >
-      <i c8yIcon="map-marker" class="c8y-icon"></i> Edit Device Location
-    </button>
-  </c8y-form-group>
+    <c8y-form-group>
+      <label>Floor Configuration</label>
+      <p class="small">Draw a rectangle on the map to define the image bounds.</p>
+      <button type="button" class="btn btn-default btn-block" (click)="openFloorConfigurationModal()">
+        <i c8yIcon="devices" class="c8y-icon"></i> Configure Floors
+      </button>
+    </c8y-form-group>
+
+    <div class="legend form-block">Device Location Assignment</div>
+
+    <c8y-form-group>
+      <label>Associate Devices</label>
+      <p class="small">Link physical devices to this map's levels.</p>
+      <button type="button" class="btn btn-default btn-block" (click)="openAssignDevicesModal()">
+        <i c8yIcon="devices" class="c8y-icon"></i> Assign Devices to Floors
+      </button>
+    </c8y-form-group>
+
+    <c8y-form-group>
+      <label>Edit Device Locations</label>
+      <p class="small">
+        Select a device and set its exact position on the map image.
+      </p>
+      <button type="button" class="btn btn-default btn-block" (click)="onEditDeviceLocation()">
+        <i c8yIcon="map-marker" class="c8y-icon"></i> Edit Device Location
+      </button>
+    </c8y-form-group>
+  </div>
 </div>

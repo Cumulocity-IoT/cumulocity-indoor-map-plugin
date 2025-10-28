@@ -16,7 +16,7 @@ import {
 
 import * as L from "leaflet";
 import "leaflet-draw";
-import { GPSCoordinates } from "../../data-point-indoor-map.model"; // Assuming correct path
+import { GPSCoordinates } from "../../../models/data-point-indoor-map.model"; // Assuming correct path
 import { BsModalRef } from "ngx-bootstrap/modal";
 
 @Component({
