@@ -62,20 +62,20 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    if (this.initialConfig.topLeftLat !== 0) {
+    if (this.initialConfig?.topLeftLat !== 0) {
       this.imageBounds.set({
         tl: {
-          lat: this.initialConfig.topLeftLat ?? 0,
-          lng: this.initialConfig.topLeftLng ?? 0,
+          lat: this.initialConfig?.topLeftLat ?? 0,
+          lng: this.initialConfig?.topLeftLng ?? 0,
         },
         br: {
-          lat: this.initialConfig.bottomRightLat ?? 0,
-          lng: this.initialConfig.bottomRightLng ?? 0,
+          lat: this.initialConfig?.bottomRightLat ?? 0,
+          lng: this.initialConfig?.bottomRightLng ?? 0,
         },
       });
     }
 
-    if ((this.initialConfig as any).polygonVerticesJson) {
+    if ((this.initialConfig as any)?.polygonVerticesJson) {
       try {
         const savedVertices = JSON.parse(
           (this.initialConfig as any).polygonVerticesJson
@@ -291,8 +291,9 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       ...this.mapToConfig(this.imageBounds()),
       ...payload,
       rotationAngle:
-        payload.rotationAngle || this.initialConfig.rotationAngle || 0,
+        payload.rotationAngle || this.initialConfig?.rotationAngle || 0,
     };
+    console.log("Emitting GPS Config Change:", finalConfig);
     this.boundaryChange.emit(finalConfig);
   }
 

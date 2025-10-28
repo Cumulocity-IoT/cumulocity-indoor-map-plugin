@@ -15,7 +15,7 @@ import { BuildingService } from "../../services/building.service";
 import { EventPollingService } from "../polling/event-polling.service";
 import { isEmpty } from "lodash";
 import { FloorConfigModalComponent } from "./floor-configuration-modal/floor-config-modal.component";
-import { MapConfiguration, MapConfigurationLevel, WidgetConfiguration } from "../../models/data-point-indoor-map.model";
+import { GPSCoordinates, MapConfiguration, MapConfigurationLevel, WidgetConfiguration } from "../../models/data-point-indoor-map.model";
 
 @Component({
   selector: "data-point-indoor-map-configuration",
@@ -205,9 +205,12 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       class: "modal-lg",
     });
 
-    modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
-      console.log("Received new boundary config from modal:", newConfig);
-      this.onGpsConfigChange(newConfig);
+
+    console.log(modalRef.content)
+
+    modalRef.content?.boundaryChange.subscribe((coordinates: GPSCoordinates) => {
+      console.log("Received new boundary config from modal:", coordinates);
+      this.onGpsConfigChange(coordinates);
     });
   }
 
@@ -307,10 +310,12 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       });
   }
 
-  onGpsConfigChange(newConfig: any): void {
-    console.log("Parent received new config (Boundaries):", newConfig);
+  onGpsConfigChange(coordinates: GPSCoordinates): void {
+    console.log("Parent received new config (Boundaries):", coordinates);
 
-    this.config.coordinates = newConfig;
+    if (this.selectedBuilding) {
+      this.selectedBuilding.coordinates = coordinates;
+    }
     this.isSaved = false;
   }
 
