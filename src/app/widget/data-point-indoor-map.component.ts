@@ -159,12 +159,8 @@ export class DataPointIndoorMapComponent
     if (!building.levels) {
       return;
     }
-
-    console.log("Building levels:", building.levels);
-
     const managedObjectsForFloorLevels =
       await this.buildingService.loadMarkersForLevels(building.levels);
-    console.log("managedObjectsForFloorLevels:", managedObjectsForFloorLevels);
     managedObjectsForFloorLevels.forEach(
       (managedObjectsForFloorLevel, index) => {
         let managedObjectsMap: { [deviceId: string]: IManagedObject } = {};
@@ -621,5 +617,11 @@ export class DataPointIndoorMapComponent
       this.markerManagedObjectsForFloorLevel.length > 0 &&
       !!this.markerManagedObjectsForFloorLevel[level]
     );
+  }
+
+  public getManagedObjectsForCurrentFloorLevel(): IManagedObject[] {
+    return this.markerManagedObjectsForFloorLevel[this.currentFloorLevel] 
+      ? Object.values(this.markerManagedObjectsForFloorLevel[this.currentFloorLevel])
+      : [];
   }
 }

@@ -1,0 +1,17 @@
+<c8y-title>Data grid examples</c8y-title>
+
+<c8y-data-grid
+  [title]="title"
+  [columns]="columns"
+  [rows]="data || []"
+  [pagination]="pagination"
+  [selectable]="selectable"
+  (itemsSelect)="onItemsSelect($event)"
+  [actionControls]="actionControls"
+  [bulkActionControls]="bulkActionControls"
+  (onConfigChange)="onConfigChange($event)"
+  (onFilter)="onFilter($event)"
+  (onAddCustomColumn)="onAddCustomColumn($event)"
+  (onRemoveCustomColumn)="onRemoveCustomColumn($event)"
+  class="content-fullpage d-flex d-col border-top border-bottom"
+></c8y-data-grid>
