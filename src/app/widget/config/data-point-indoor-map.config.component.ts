@@ -15,7 +15,12 @@ import { BuildingService } from "../../services/building.service";
 import { EventPollingService } from "../polling/event-polling.service";
 import { isEmpty } from "lodash";
 import { FloorConfigModalComponent } from "./floor-configuration-modal/floor-config-modal.component";
-import { GPSCoordinates, MapConfiguration, MapConfigurationLevel, WidgetConfiguration } from "../../models/data-point-indoor-map.model";
+import {
+  GPSCoordinates,
+  MapConfiguration,
+  MapConfigurationLevel,
+  WidgetConfiguration,
+} from "../../models/data-point-indoor-map.model";
 
 @Component({
   selector: "data-point-indoor-map-configuration",
@@ -76,8 +81,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     return (
       !!this.selectedBuilding?.levels && this.selectedBuilding.levels.length > 0
     );
-  } 
-
+  }
 
   onMapConfigurationInputChange(value: string): void {
     this.mapConfigInput = value;
@@ -124,6 +128,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       location: "",
       assetType: "",
       zoomLevel: 18,
+      rotationAngle: 0,
       levels: [],
       type: "c8y_Building",
     };
@@ -173,7 +178,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       });
   }
 
-
   onPrimaryMeasurementChanged(): void {
     const measurement: string[] = this.selectedDataPoint!.split(".");
     this.config.measurement = {
@@ -181,7 +185,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       series: measurement[1],
     };
   }
-
 
   onAssignDevicesButtonClicked(): void {
     if (!this.selectedBuilding) return;
@@ -191,8 +194,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     );
   }
 
-
-
   openMapBoundaryModal(): void {
     if (!this.selectedBuilding) return;
     console.log(
@@ -201,48 +202,36 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     );
 
     const modalRef = this.modalService.show(GPSComponent, {
-      initialState: { initialConfig: this.config.coordinates } as any,
+      initialState: { initialConfig: this.selectedBuilding.coordinates } as any,
       class: "modal-lg",
     });
 
+    console.log(modalRef.content);
 
-    console.log(modalRef.content)
-
-    modalRef.content?.boundaryChange.subscribe((coordinates: GPSCoordinates) => {
-      console.log("Received new boundary config from modal:", coordinates);
-      this.onGpsConfigChange(coordinates);
-    });
+    modalRef.content?.boundaryChange.subscribe(
+      (coordinates: GPSCoordinates) => {
+        console.log("Received new boundary config from modal:", coordinates);
+        this.onGpsConfigChange(coordinates);
+      }
+    );
   }
 
   onZoneCreation() {
-    console.log("bb", this.selectedBuilding);
-
     if (!this.selectedBuilding) return;
-    const currentCoordinates = this.config?.coordinates || {};
-
-    const obj = {
-      ...currentCoordinates,
-      rotationAngle: this.config?.mapSettings?.rotationAngle || 0,
-      allZonesByLevel: this.config?.allZonesByLevel || [],
-      building: this.selectedBuilding,
-    };
+    const currentCoordinates = this.selectedBuilding?.coordinates || {};
+    console.log("bfre zone", this.selectedBuilding);
 
     const modalRef = this.modalService.show(ZonesComponent, {
-      initialState: { initialConfig: obj } as any,
+      initialState: { initialConfig: this.selectedBuilding } as any,
       class: "modal-lg",
     });
 
     modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
       console.log("Received new boundary config from modal:", newConfig);
-      // The modal returns the rotation angle, so save both coordinates AND rotation angle here.
       this.onZoneChange(newConfig);
-
-      // Since rotationAngle is now returned by the modal, extract and save it to mapSettings
-      // this.config.mapSettings.rotationAngle = newConfig.rotationAngle || 0;
     });
   }
 
-  
   onEditDeviceLocation(): void {
     if (!this.selectedBuilding) return;
     this.modalService.show(AssignLocationModalComponent, {
@@ -264,7 +253,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       }
     );
   }
-
 
   openFloorConfigurationModal(): void {
     if (!this.selectedBuilding) return;
@@ -321,7 +309,9 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   onZoneChange(newConfig: any): void {
     console.log("Parent received new config (Zones):", newConfig);
-    this.config.allZonesByLevel = newConfig.allZonesByLevel;
+    if (this.selectedBuilding) {
+      this.selectedBuilding.allZonesByLevel = newConfig.allZonesByLevel;
+    }
     this.isSaved = false;
   }
 
@@ -334,7 +324,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       return false;
     } // Optionally, persist the configuration using the service
 
-    const coords = config?.coordinates as any;
+    const coords = this.selectedBuilding?.coordinates as any;
     const hasValidCorners =
       coords?.placementMode === "corners" &&
       coords.topLeftLat &&
@@ -349,7 +339,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       return false;
     }
 
-   // return true;
+    // return true;
     return this.buildingService
       .createOrUpdateBuilding(this.selectedBuilding)
       .then(() => {

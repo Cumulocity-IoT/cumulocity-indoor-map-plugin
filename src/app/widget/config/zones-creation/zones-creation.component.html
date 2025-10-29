@@ -13,7 +13,7 @@
           (ngModelChange)="onFloorLevelChanged($event)"
         >
           <option
-            *ngFor="let level of initialConfig.building?.levels; let i = index"
+            *ngFor="let level of initialConfig.levels; let i = index"
             [ngValue]="i"
           >
             {{ level.name }}

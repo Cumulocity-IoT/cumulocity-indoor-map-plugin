@@ -261,7 +261,7 @@ export class DataPointIndoorMapComponent
   }
 
   private calculateBounds(): L.LatLngBounds | null {
-    if (!!this.config.coordinates && this.building?.coordinates) {
+    if (this.building?.coordinates) {
       const { topLeftLat, topLeftLng, bottomRightLat, bottomRightLng } =
         this.building.coordinates;
 
@@ -360,7 +360,7 @@ export class DataPointIndoorMapComponent
 
     this.zonesFeatureGroup.clearLayers();
 
-    if (!this.showZones || !this.config.coordinates) {
+    if (!this.showZones || !this.building?.coordinates) {
       // If zones are supposed to be hidden, ensure we are not isolated.
       this.isolatedLayer = null;
       this.isZoneIsolated = false;
@@ -368,7 +368,7 @@ export class DataPointIndoorMapComponent
     }
 
     // 1. Parse Zones from config (same logic as before)
-    const allZonesData = this.config?.allZonesByLevel;
+    const allZonesData = this.building?.allZonesByLevel;
 
     let zonesJsonString;
     if (allZonesData) {
