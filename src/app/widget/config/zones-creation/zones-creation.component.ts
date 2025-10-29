@@ -17,7 +17,10 @@ import * as L from "leaflet";
 import "@geoman-io/leaflet-geoman-free";
 import { BsModalRef } from "ngx-bootstrap/modal";
 import { InventoryBinaryService } from "@c8y/client";
-import { GPSConfigWithImage, GPSCoordinates } from "../../../models/data-point-indoor-map.model";
+import {
+  GPSCoordinates,
+  MapConfiguration,
+} from "../../../models/data-point-indoor-map.model";
 
 @Component({
   selector: "c8y-zone-creation-component",
@@ -27,27 +30,7 @@ import { GPSConfigWithImage, GPSCoordinates } from "../../../models/data-point-i
   encapsulation: ViewEncapsulation.None,
 })
 export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
-  @Input() initialConfig: GPSConfigWithImage = {
-    topLeftLat: 0,
-    topLeftLng: 0,
-    bottomRightLat: 0,
-    bottomRightLng: 0,
-    rotationAngle: 0,
-    building: {
-      id: "",
-      name: "",
-      coordinates: {
-        topLeftLat: 0,
-        topLeftLng: 0,
-        bottomRightLat: 0,
-        bottomRightLng: 0,
-      },
-      location: "",
-      assetType: "",
-      levels: [],
-      type: "c8y_Building",
-    },
-  };
+  @Input() initialConfig!: MapConfiguration;
   @Output() boundaryChange = new EventEmitter<GPSCoordinates>();
 
   @ViewChild("boundaryMap", { read: ElementRef, static: true })
@@ -89,15 +72,15 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   async ngOnInit() {
     // 1. Set imageBounds from initial config
-    if (this.initialConfig.topLeftLat !== 0) {
+    if (this.initialConfig.coordinates.topLeftLat !== 0) {
       this.imageBounds.set({
         tl: {
-          lat: this.initialConfig.topLeftLat ?? 0,
-          lng: this.initialConfig.topLeftLng ?? 0,
+          lat: this.initialConfig.coordinates.topLeftLat ?? 0,
+          lng: this.initialConfig.coordinates.topLeftLng ?? 0,
         },
         br: {
-          lat: this.initialConfig.bottomRightLat ?? 0,
-          lng: this.initialConfig.bottomRightLng ?? 0,
+          lat: this.initialConfig.coordinates.bottomRightLat ?? 0,
+          lng: this.initialConfig.coordinates.bottomRightLng ?? 0,
         },
       });
     }
@@ -241,7 +224,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     const initialBounds = this.imageBounds();
     const bounds = this.getLeafletBounds(initialBounds);
     const currentLevelConfig =
-      this.initialConfig.building?.levels?.[this.currentFloorLevel];
+      this.initialConfig.levels?.[this.currentFloorLevel];
 
     this.map = L.map(this.mapReference.nativeElement, {
       center: bounds?.getCenter() || [52.52, 13.4],
@@ -426,7 +409,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // 3. Load the current floor's configuration data
     const currentLevelConfig =
-      this.initialConfig?.building?.levels?.[this.currentFloorLevel];
+      this.initialConfig?.levels?.[this.currentFloorLevel];
     const initialBounds = this.imageBounds();
     const bounds = this.getLeafletBounds(initialBounds);
 

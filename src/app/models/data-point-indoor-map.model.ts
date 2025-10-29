@@ -20,18 +20,11 @@ import { IManagedObject } from "@c8y/client";
 export interface WidgetConfiguration {
   mapConfigurationId: string;
   measurement: Datapoint;
-  mapSettings: {
-    zoomLevel: number;
-    rotationAngle: number;
-  };
   legend?: {
     title: string;
     thresholds?: Threshold[];
   };
   datapointsPopup?: DatapointPopup[];
-  coordinates?: GPSCoordinates;
-  zones?: ZoneGeometry[];
-  allZonesByLevel?: { [levelName: string]: ZoneGeometry[] };
   buildingId: string;
   buildingName: string;
 }
@@ -66,9 +59,11 @@ export interface MapConfiguration {
   name: string;
   coordinates: GPSCoordinates;
   zoomLevel?: number;
+  rotationAngle: number;
   location: string;
   assetType: string;
   levels: MapConfigurationLevel[];
+  allZonesByLevel?: { [levelName: string]: ZoneGeometry[] };
   type: "c8y_Building";
 }
 
@@ -107,13 +102,6 @@ export interface MarkerManagedObject extends IManagedObject {
     lat: number;
     lng: number;
   };
-}
-
-export interface GPSConfigWithImage extends GPSCoordinates {
-  rotationAngle: number;
-  allZonesByLevel?: { [levelName: string]: ZoneGeometry[] };
-
-  building?: MapConfiguration;
 }
 
 export interface ZoneGeometry {
