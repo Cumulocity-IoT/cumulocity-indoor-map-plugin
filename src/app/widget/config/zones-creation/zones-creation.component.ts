@@ -345,7 +345,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       dragMode: true,
       cutPolygon: false,
       deleteMode: true,
-      rotateMode: true,
+      rotateMode: false,
       allowSelfIntersection: false,
 
       edit: {
@@ -359,9 +359,21 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       layer.pm.enable({ allowSelfIntersection: false, rotate: true });
       this.updateZonesState();
     });
+
+    mapWithPm.on("pm:remove", (e: any) => {
+      // Called when a layer is removed
+      setTimeout(() => {
+        this.updateZonesState();
+      }, 0);
+    });
+
+    // Optional: Also listen for edit events to capture all changes
+    mapWithPm.on("pm:edit", (e: any) => {
+      this.updateZonesState();
+    });
   }
 
-  public onFloorLevelChanged(newLevelIndex: number): void {
+  public async onFloorLevelChanged(newLevelIndex: number): Promise<void> {
     if (this.currentFloorLevel === newLevelIndex) return;
 
     // 1. Save the current state of the old floor
@@ -388,39 +400,35 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // 4. Redraw map contents
     if (this.map) {
-      this.redrawMapContents();
+      await this.redrawMapContents();
     }
   }
 
   private async redrawMapContents() {
     if (!this.map) return;
+    const mapWithPm = this.map as any;
 
-    // 1. Clear ALL layers
     this.map.eachLayer((layer) => {
       layer.remove();
     });
 
-    // 2. Re-add the tile layer
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution:
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
 
-    // 3. Load the current floor's configuration data
     const currentLevelConfig =
       this.initialConfig?.levels?.[this.currentFloorLevel];
     const initialBounds = this.imageBounds();
     const bounds = this.getLeafletBounds(initialBounds);
 
-    // 3. Redraw Image Overlay (ASYNCHRONOUSLY)
     if (currentLevelConfig?.binaryId && bounds) {
       try {
         const imgBlob = await this.getImage(currentLevelConfig.binaryId);
         const imgSource = URL.createObjectURL(imgBlob);
         const rotationAngle = this.initialConfig.rotationAngle || 0;
 
-        // Remove old image overlay if it exists
         if (this.imageOverlayLayer) {
           this.imageOverlayLayer.remove();
         }
@@ -433,26 +441,19 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
         );
         this.imageOverlayLayer.addTo(this.map);
 
-        // Ensure bounds are properly set
         this.map.fitBounds(bounds);
       } catch (error) {
         console.error("Failed to load image overlay:", error);
       }
 
-      // 4. Re-enable Geoman FeatureGroup
-      // NOTE: This must be done AFTER removing the old one!
       this.zoneFeatureGroup = new L.FeatureGroup();
       this.map.addLayer(this.zoneFeatureGroup);
-
-      const mapWithPm = this.map as any;
-      mapWithPm.pm.setOptions({
-        edit: { featureGroup: this.zoneFeatureGroup },
+      mapWithPm.pm.setGlobalOptions({
+        layerGroup: this.zoneFeatureGroup,
       });
 
-      // 5. Redraw Zones (drawSavedZones clears and adds to zoneFeatureGroup)
       this.drawSavedZones();
 
-      // 6. Final refresh
       this.map.invalidateSize(true);
       this.centerMapOnBounds();
     }
@@ -484,22 +485,10 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private emitConfigChange(payload: any): void {
-    const currentBounds = this.imageBounds();
-    const currentZones = this.zones();
-
     const finalConfig = {
-      placementMode:
-        this.allZonesByLevel["0"] || this.allZonesByLevel["1"]
-          ? "zones"
-          : "corners",
-      topLeftLat: currentBounds.tl.lat,
-      topLeftLng: currentBounds.tl.lng,
-      bottomRightLat: currentBounds.br.lat,
-      bottomRightLng: currentBounds.br.lng,
-
       allZonesByLevel: this.allZonesByLevel,
-      rotationAngle: this.initialConfig.rotationAngle || 0,
     };
+
     this.boundaryChange.emit(finalConfig as GPSCoordinates);
   }
 
