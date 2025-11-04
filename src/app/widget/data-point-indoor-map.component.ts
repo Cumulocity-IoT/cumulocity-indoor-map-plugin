@@ -7,7 +7,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,12 +40,18 @@ import { fromEvent, Subscription, takeUntil } from "rxjs";
 import { EventPollingService } from "./polling/event-polling.service";
 import { get } from "lodash";
 import { BuildingService } from "../services/building.service";
+import { ImageRotateService } from "../services/image-rotate.service";
 
 @Component({
   selector: "data-point-indoor-map",
   templateUrl: "data-point-indoor-map.component.html",
   styleUrls: ["./data-point-indoor-map.component.less"],
-  providers: [MeasurementRealtimeService, EventPollingService, BuildingService],
+  providers: [
+    MeasurementRealtimeService,
+    EventPollingService,
+    BuildingService,
+    ImageRotateService,
+  ],
   encapsulation: ViewEncapsulation.None,
 })
 export class DataPointIndoorMapComponent
@@ -84,12 +90,16 @@ export class DataPointIndoorMapComponent
 
   destroy$ = new EventEmitter<void>();
 
-  constructor(private buildingService: BuildingService) {}
+  constructor(
+    private buildingService: BuildingService,
+    private imageRotateService: ImageRotateService
+  ) {}
 
   async ngOnInit() {
     console.log("this.config,", this.config.buildingId);
 
     this.leaf = await import("leaflet");
+    this.imageRotateService.initialize(this.leaf);
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -106,7 +116,6 @@ export class DataPointIndoorMapComponent
       this.initMarkers(this.map, level);
     } else {
       this.isLoading = false;
-      // Optionally handle the error case here
     }
     // this.initEventUpdates(level);
   }
@@ -280,8 +289,45 @@ export class DataPointIndoorMapComponent
       const northEast = this.leaf.latLng(topLeftLat, bottomRightLng);
       return this.leaf.latLngBounds(southWest, northEast);
     }
-    //}
     return null;
+  }
+
+  private getValidatedControlPoints():
+    | {
+        topleft: L.LatLng;
+        topright: L.LatLng;
+        bottomleft: L.LatLng;
+      }
+    | undefined {
+    // 1. Try to get accurate polygon points first (for rotated images)
+    const polygonPoints = this.getPolygonControlPoints();
+    if (polygonPoints) {
+      return polygonPoints;
+    }
+
+    // 2. Fallback: Use the bounding box corners if polygon data is missing
+    const coords = this.building?.coordinates;
+    if (!coords) {
+      return undefined;
+    }
+
+    // Safely extract coordinates, defaulting to 0 for error prevention
+    const topLat = coords.topLeftLat ?? 0;
+    const leftLng = coords.topLeftLng ?? 0;
+    const bottomLat = coords.bottomRightLat ?? 0;
+    const rightLng = coords.bottomRightLng ?? 0;
+
+    // Ensure at least some coordinate data is present (e.g., non-zero) for a valid overlay
+    if (!topLat && !leftLng && !bottomLat && !rightLng) {
+      return undefined;
+    }
+
+    // Create the three LatLng objects using bounding box logic
+    const topleft = this.leaf.latLng(topLat, leftLng);
+    const topright = this.leaf.latLng(topLat, rightLng);
+    const bottomleft = this.leaf.latLng(bottomLat, leftLng);
+
+    return { topleft, topright, bottomleft };
   }
 
   private initMap(building: MapConfiguration, level: number): L.Map {
@@ -292,9 +338,14 @@ export class DataPointIndoorMapComponent
       return this.leaf.map(this.mapReference.nativeElement);
     }
 
+    const controlPoints = this.getValidatedControlPoints();
+    if (!controlPoints) {
+      return this.leaf.map(this.mapReference.nativeElement);
+    }
+    const { topleft, topright, bottomleft } = controlPoints;
+
     const map = this.leaf.map(this.mapReference.nativeElement);
 
-    // Overwrite the default prefix for map controls
     this.leaf.Control.Attribution.prototype.options.prefix = false;
 
     this.leaf
@@ -306,12 +357,17 @@ export class DataPointIndoorMapComponent
 
     if (currentMapConfigurationLevel?.blob) {
       const imgBlobURL = URL.createObjectURL(currentMapConfigurationLevel.blob);
-      this.leaf
-        .imageOverlay(imgBlobURL, bounds, {
+      const imageOverlay = (this.leaf.imageOverlay as any).rotated(
+        imgBlobURL,
+        topleft,
+        topright,
+        bottomleft,
+        {
           opacity: 1,
           interactive: true,
-        })
-        .addTo(map);
+        }
+      );
+      imageOverlay.addTo(map);
 
       const zoom = this.building?.zoomLevel;
       const center = this.getCenterCoordinates(this.building?.coordinates);
@@ -330,7 +386,6 @@ export class DataPointIndoorMapComponent
     this.renderZones(map);
     return map;
   }
-
   private onZoomEnd() {
     /* localStorage.setItem(
       `${this.config.mapConfigurationId}-${this.currentFloorLevel}-zoom`,
@@ -345,18 +400,57 @@ export class DataPointIndoorMapComponent
     );
   }
 
+  private getPolygonControlPoints():
+    | {
+        topleft: L.LatLng;
+        topright: L.LatLng;
+        bottomleft: L.LatLng;
+      }
+    | undefined {
+    if (this.building?.coordinates?.polygonVerticesJson) {
+      try {
+        const polygonData = JSON.parse(
+          this.building.coordinates.polygonVerticesJson
+        );
+        // Assuming polygonData is an array of arrays, and we want the first vertex set
+        const vertices = polygonData[0];
+
+        // Assuming V1=TopLeft, V2=TopRight, V4=BottomLeft of the image area
+        if (vertices && vertices.length >= 4) {
+          const V1 = vertices[0];
+          const V2 = vertices[1];
+          const V4 = vertices[3]; // The fourth point in the array
+
+          // We use the LatLng constructor with the true polygon points
+          // Nullish coalescing is needed here in case polygon points themselves are undefined
+          const topleft = this.leaf.latLng(V1.lat ?? 0, V1.lng ?? 0);
+          const topright = this.leaf.latLng(V2.lat ?? 0, V2.lng ?? 0);
+          const bottomleft = this.leaf.latLng(V4.lat ?? 0, V4.lng ?? 0);
+
+          return { topleft, topright, bottomleft };
+        }
+      } catch (e) {
+        console.error("Failed to parse polygonVerticesJson:", e);
+      }
+    }
+    return undefined;
+  }
+
   getCenterCoordinates(coordinates: any): [number, number] {
     if (coordinates) {
-      const centerLat =
-        (coordinates.topLeftLat + coordinates.bottomRightLat) / 2;
-      const centerLng =
-        (coordinates.topLeftLng + coordinates.bottomRightLng) / 2;
+      const topLeftLat = coordinates.topLeftLat ?? 0;
+      const bottomRightLat = coordinates.bottomRightLat ?? 0;
+      const topLeftLng = coordinates.topLeftLng ?? 0;
+      const bottomRightLng = coordinates.bottomRightLng ?? 0;
+
+      const centerLat = (topLeftLat + bottomRightLat) / 2;
+      const centerLng = (topLeftLng + bottomRightLng) / 2;
+
       return [centerLat, centerLng];
     } else {
       return [51.23544, 6.79599];
     }
   }
-
   private renderZones(map: L.Map): void {
     if (!this.zonesFeatureGroup) {
       this.zonesFeatureGroup = this.leaf.featureGroup().addTo(map);
@@ -416,7 +510,6 @@ export class DataPointIndoorMapComponent
           if (clickedLayer.getBounds && clickedLayer.getBounds().isValid()) {
             const bounds = clickedLayer.getBounds();
 
-            // 1. ISOLATE & UPDATE STATE: Remove the feature group and save the layer reference
             this.zonesFeatureGroup!.remove();
 
             this.isolatedLayer = clickedLayer;
@@ -424,19 +517,12 @@ export class DataPointIndoorMapComponent
 
             clickedLayer.addTo(mapInstance); // Add the isolated layer to the map
 
-            // 2. ZOOM: Use a forced invalidation pattern to guarantee the zoom executes.
-
-            // a. Invalidate size first
             mapInstance.invalidateSize(true);
 
-            // b. Apply fitBounds
             mapInstance.fitBounds(bounds, {
               padding: [50, 50],
               maxZoom: 18,
             });
-
-            // 3. Prevent map from restoring the full view immediately
-            // The 'renderZones' function now checks this.isZoneIsolated and stops rendering the feature group.
           }
         });
         this.zonesFeatureGroup!.addLayer(vectorLayer);
@@ -447,19 +533,15 @@ export class DataPointIndoorMapComponent
   private updateMapLevel(level: MapConfigurationLevel) {
     const map = this.map!;
 
-    // Clear the existing zones feature group first
     if (this.zonesFeatureGroup) {
       this.zonesFeatureGroup.clearLayers();
     }
 
-    // Clear all other layers
     map.eachLayer((layer) => {
       if (layer !== this.zonesFeatureGroup) {
         layer.removeFrom(map);
       }
     });
-
-    // Add the base tile layer
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
@@ -467,20 +549,27 @@ export class DataPointIndoorMapComponent
       })
       .addTo(map);
 
-    // Fetch the bounds using the shared calculateBounds function
     const bounds = this.calculateBounds();
 
-    // If no valid bounds are returned, return early
-    if (!bounds) {
+    const controlPoints = this.getValidatedControlPoints();
+    if (!controlPoints) {
       return;
     }
+    const { topleft, topright, bottomleft } = controlPoints;
 
     if (level.blob) {
       const imgBlobURL = URL.createObjectURL(level.blob);
-      const imageOverlay = this.leaf.imageOverlay(imgBlobURL, bounds, {
-        opacity: 1,
-        interactive: true,
-      });
+
+      const imageOverlay = (this.leaf.imageOverlay as any).rotated(
+        imgBlobURL,
+        topleft,
+        topright,
+        bottomleft,
+        {
+          opacity: 1,
+          interactive: true,
+        }
+      );
       imageOverlay.addTo(map);
 
       const zoom = this.building?.zoomLevel;
@@ -500,7 +589,6 @@ export class DataPointIndoorMapComponent
       this.renderZones(map);
     }
   }
-
   public toggleZoneVisibility(): void {
     if (!this.map) return;
     this.renderZones(this.map); // Rerun renderZones, which will show/hide based on this.showZones
