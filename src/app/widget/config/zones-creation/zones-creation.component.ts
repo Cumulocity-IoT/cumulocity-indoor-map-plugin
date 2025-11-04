@@ -111,9 +111,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    // NOTE: ImageRotateService initialized in ngOnInit
     await this.initMap();
-
     if (this.map) {
       setTimeout(() => {
         if (this.map) {
@@ -293,7 +291,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
             rotate: true,
           });
 
-          // Apply saved rotation (requires Geoman rotation functionality)
           if (zone.rotation && (vectorLayer as any).setRotation) {
             (vectorLayer as any).setRotation(zone.rotation);
           }
@@ -333,7 +330,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       dragMode: true,
       cutPolygon: false,
       deleteMode: true,
-      rotateMode: true, // Crucial for zone rotation
+      rotateMode: true,
       allowSelfIntersection: false,
 
       edit: {
@@ -349,19 +346,17 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     });
 
     mapWithPm.on("pm:remove", (e: any) => {
+      this.zoneFeatureGroup!.removeLayer(e.layer);
       setTimeout(() => {
         this.updateZonesState();
-      }, 0);
+      }, 50);
     });
 
     mapWithPm.on("pm:edit", (e: any) => {
       this.updateZonesState();
     });
 
-    // Use the official Geoman event for rotation end
     mapWithPm.on("pm:rotateend", (e: any) => {
-      // Since Geoman updates the layer internally, we just call updateZonesState
-      // in a timeout to ensure all geometry and options are finalized by Geoman.
       setTimeout(() => {
         this.updateZonesState();
       }, 0);
@@ -445,14 +440,16 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     this.zoneFeatureGroup.eachLayer((layer: any) => {
       if (layer.toGeoJSON) {
         const geoJson = layer.toGeoJSON();
+        let rotationAngle = 0;
 
-        // Capture the rotation angle: Geoman often stores it in layer.options.rotation
-        // after rotation is complete, or directly on the layer's internal rotation property.
-        // We use a safe check.
-        const rotationAngle =
-          layer.options.rotation ||
-          (layer.pm && (layer.pm._angle || layer.pm._layer.options.rotation)) ||
-          0;
+        // 1. Check layer options (where Geoman typically stores the final rotation)
+        rotationAngle = layer.options.rotation || 0;
+
+        // 2. If not found in options, check the Geoman editing instance state
+        if (rotationAngle === 0 && layer.pm) {
+          rotationAngle =
+            (layer.pm as any)._rotation || (layer.pm as any)._rotateAngle || 0;
+        }
 
         currentZones.push({
           geometry: geoJson.geometry,
@@ -462,8 +459,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.zones.set(currentZones);
-
-    // Save stringified data back to the dictionary for the current level
     const currentLevelIndex = this.currentFloorLevel.toString();
     this.allZonesByLevel[currentLevelIndex] = JSON.stringify(currentZones);
 
