@@ -84,7 +84,7 @@ export class MapDataGridComponent implements OnInit {
     showSearch: false,
     striped: true,
     bordered: false,
-    gridHeader: true,
+    gridHeader: false,
     filter: true,
     hover: true,
   };

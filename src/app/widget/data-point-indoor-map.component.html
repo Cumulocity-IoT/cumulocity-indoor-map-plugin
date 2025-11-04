@@ -1,42 +1,110 @@
-<div class="map-container" style="height: 70%; padding: 10px">
-  <c8y-loading class="loading-absolute" *ngIf="isLoading"></c8y-loading>
-  <div class="map-frame" style="height: 100%">
-    <div
-      #IndoorDataPointMap
-      style="width: 100%; height: 100%; background-color: #fff"
-    ></div>
-  </div>
-  <div class="map-legend" *ngIf="building?.levels?.length > 1">
-    <div>
-      <label>
-        <input
-          type="checkbox"
-          [(ngModel)]="showZones"
-          (ngModelChange)="toggleZoneVisibility()"
-        />
-        Show Zones
-      </label>
-    </div>
-    <div *ngIf="(building?.levels?.length || 0) > 1">
-      <div class="c8y-select-wrapper">
-        <select
-          class="form-control"
-          [(ngModel)]="currentFloorLevel"
-          (ngModelChange)="onLevelChanged()"
+<div class="row action-container" *ngIf="building?.levels?.length > 1">
+  
+  <div class="col-md-2" *ngIf="(building?.levels?.length || 0) > 1">
+    <label for="floorLevelSelect" class="c8y-label">Floor Level</label>
+    <div class="c8y-select-wrapper">
+      <select
+        id="floorLevelSelect"
+        class="form-control"
+        [(ngModel)]="currentFloorLevel"
+        (ngModelChange)="onLevelChanged()"
+      >
+        <option
+          *ngFor="let level of building?.levels; let i = index"
+          value="{{ i }}"
+          title="{{ level.name }}"
         >
-          <option
-            *ngFor="let level of building?.levels; let i = index"
-            value="{{ i }}"
-            title="{{ level.name }}"
-          >
-            {{ level.name }}
-          </option>
-        </select>
-      </div>
+          {{ level.name }}
+        </option>
+      </select>
     </div>
+  </div>
+  
+  <div class="col-md-6">
+    <label class="c8y-label">Search Devices</label>
+    <div class="input-group input-group-search" id="example">
+      <input
+        class="form-control"
+        type="search"
+        placeholder="Search devices by Name, Type, or ID…"
+        [(ngModel)]="searchString"
+        (ngModelChange)="filterMarkers()"
+        aria-label="Search input"
+      />
+      <span class="input-group-btn">
+        <button
+          class="btn btn-clean"
+          type="button"
+          title="Search"
+          aria-label="Search"
+          *ngIf="!searchString || searchString.length === 0"
+        >
+          <i c8yIcon="search"></i>
+        </button>
+        <button
+          class="btn btn-clean"
+          type="button"
+          title="Clear search"
+          aria-label="Clear search"
+          *ngIf="searchString && searchString.length > 0"
+          (click)="searchString = ''; filterMarkers()"
+        >
+          <i c8yIcon="times"></i>
+        </button>
+      </span>
+    </div>
+  </div>
+<div class="col-md-2">
+    <label for="deviceTypeSelect" class="c8y-label">Device Type</label>
+    <div class="c8y-select-wrapper">
+      <select
+        id="deviceTypeSelect"
+        class="form-control"
+        [(ngModel)]="selectedType"
+        (ngModelChange)="filterMarkers()"
+        title="Filter by device type"
+      >
+        <option value="">All Types</option>
+        <option
+          *ngFor="let type of getUniqueDeviceTypes()"
+          value="{{ type }}"
+          title="{{ type }}"
+        >
+          {{ type }}
+        </option>
+      </select>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <label class="c8y-label">&nbsp;</label>
+    <label
+      class="c8y-switch"
+      title="Switch on/off"
+      aria-label="Show Zones toggle switch"
+    >
+      <input
+        type="checkbox"
+        [(ngModel)]="showZones"
+        (ngModelChange)="toggleZoneVisibility()"
+      />
+      <span></span>
+      Show Zones
+    </label>
   </div>
 </div>
 
-<map-data-grid
-[devices]="getManagedObjectsForCurrentFloorLevel()"></map-data-grid>
- 
+<div class="content-scroll-container">
+  <div class="map-container" style="height: 70%; padding: 10px">
+    <c8y-loading class="loading-absolute" *ngIf="isLoading"></c8y-loading>
+    <div class="map-frame" style="width: 100%; height: 100%">
+      <div
+        #IndoorDataPointMap
+        style="width: 100%; height: 100%; background-color: #fff"
+      ></div>
+    </div>
+  </div>
+
+  <map-data-grid
+    [devices]="getManagedObjectsForCurrentFloorLevel()"
+  ></map-data-grid>
+</div>

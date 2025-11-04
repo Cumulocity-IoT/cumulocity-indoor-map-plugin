@@ -7,7 +7,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -58,6 +58,7 @@ export class DataPointIndoorMapComponent
   building?: MapConfiguration;
 
   private readonly MARKER_DEFAULT_COLOR = "#1776BF";
+  private readonly MARKER_HIGHLIGHT_COLOR = "#FFC300"; // Distinct color for highlighting
   private readonly KEY_LATEST_MEASUREMENT = "latestPrimaryMeasurement";
   private readonly KEY_MEASUREMENTS = "measurements";
   private readonly KEY_MAP_MARKER_INSTANCE = "mapMarkerInstance";
@@ -75,6 +76,8 @@ export class DataPointIndoorMapComponent
   primaryMeasurementReceivedSub?: Subscription;
   eventThresholdSub?: Subscription;
   isLoading = false;
+  searchString: string = "";
+  selectedType: string = ""; // <-- New property for the type filter
 
   private zonesFeatureGroup?: L.FeatureGroup;
   public showZones: boolean = false; // Controls visibility of all zones
@@ -83,6 +86,9 @@ export class DataPointIndoorMapComponent
   public isZoneIsolated: boolean = false;
 
   destroy$ = new EventEmitter<void>();
+
+  private markersLayer?: L.FeatureGroup; // Feature group to hold the markers
+  private filteredDevicesForGrid: IManagedObject[] = []; // Used for the data grid
 
   constructor(private buildingService: BuildingService) {}
 
@@ -132,10 +138,21 @@ export class DataPointIndoorMapComponent
     await this.loadLatestPrimaryMeasurementForMarkers(level);
     this.unsubscribeListeners();
     this.initMeasurementUpdates(level);
-    //    this.initEventUpdates(level);
     this.isLoading = false;
     this.updateMapLevel(this.building!.levels![level]);
+    // Re-initialize markers to apply level change and current search string
     this.initMarkers(this.map!, level);
+  }
+
+  /**
+   * Public method to call when searchString or selectedType changes from the HTML.
+   */
+  public filterMarkers(): void {
+    if (this.map) {
+      // Re-initialize markers to apply the new filter
+      this.initMarkers(this.map, this.currentFloorLevel);
+    }
+    // The data grid is automatically filtered via the getter
   }
 
   /**
@@ -177,12 +194,6 @@ export class DataPointIndoorMapComponent
     );
   }
 
-  /**
-   * Load the latest primary measurement for all available markers on the
-   * currently configured floor level. The latest measurement is stored as
-   * a property on the corresponding managed object and used to initialize
-   * the map markers and their colors based on the configured legend correctly.
-   */
   private async loadLatestPrimaryMeasurementForMarkers(
     level: number
   ): Promise<void> {
@@ -200,8 +211,6 @@ export class DataPointIndoorMapComponent
       return;
     }
 
-    //this.subscribeForMeasurementUpdates(level);
-    //this.listenToPrimaryMeasurementUpdates(level);
     this.listenToConfiguredMeasurementUpdates(level);
   }
 
@@ -219,14 +228,9 @@ export class DataPointIndoorMapComponent
     if (!mapMarkerInstance) {
       return;
     }
-    mapMarkerInstance.setStyle({ fillColor });
+    (mapMarkerInstance as L.CircleMarker).setStyle({ fillColor });
   }
 
-  /**
-   * listen to updates for measurements, which should be displayed in the popup
-   * for a corresponding map marker instance. Configure the popup based on the
-   * received measurements
-   */
   private listenToConfiguredMeasurementUpdates(level: number) {
     this.measurementReceivedSub = this.buildingService.measurementReceived$
       .pipe(takeUntil(this.destroy$))
@@ -276,7 +280,6 @@ export class DataPointIndoorMapComponent
       const northEast = this.leaf.latLng(topLeftLat, bottomRightLng);
       return this.leaf.latLngBounds(southWest, northEast);
     }
-    //}
     return null;
   }
 
@@ -291,7 +294,7 @@ export class DataPointIndoorMapComponent
     const map = this.leaf.map(this.mapReference.nativeElement);
 
     // Overwrite the default prefix for map controls
-    this.leaf.Control.Attribution.prototype.options.prefix = false;
+    (this.leaf.Control.Attribution.prototype as any).options.prefix = false;
 
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -328,10 +331,7 @@ export class DataPointIndoorMapComponent
   }
 
   private onZoomEnd() {
-    /* localStorage.setItem(
-      `${this.config.mapConfigurationId}-${this.currentFloorLevel}-zoom`,
-      this.map!.getZoom().toString()
-    ); */
+    /* ... */
   }
 
   private onDragEnd() {
@@ -361,15 +361,12 @@ export class DataPointIndoorMapComponent
     this.zonesFeatureGroup.clearLayers();
 
     if (!this.showZones || !this.building?.coordinates) {
-      // If zones are supposed to be hidden, ensure we are not isolated.
       this.isolatedLayer = null;
       this.isZoneIsolated = false;
       return;
     }
 
-    // 1. Parse Zones from config (same logic as before)
     const allZonesData = this.building?.allZonesByLevel;
-
     let zonesJsonString;
     if (allZonesData) {
       zonesJsonString = allZonesData[this.currentFloorLevel];
@@ -390,14 +387,12 @@ export class DataPointIndoorMapComponent
       this.isolatedLayer.addTo(map);
       return;
     }
-    // 2. Draw each zone and add click handlers
     this.loadedZones.forEach((zone: any) => {
       if (!zone.geometry) return;
 
       const layer = this.leaf.geoJSON(zone.geometry);
 
       layer.eachLayer((vectorLayer) => {
-        // Check if it's a vector layer (L.Path) for styling
         if (vectorLayer instanceof this.leaf.Path) {
           (vectorLayer as any).setStyle({
             color: "#0000FF",
@@ -412,27 +407,19 @@ export class DataPointIndoorMapComponent
           if (clickedLayer.getBounds && clickedLayer.getBounds().isValid()) {
             const bounds = clickedLayer.getBounds();
 
-            // 1. ISOLATE & UPDATE STATE: Remove the feature group and save the layer reference
             this.zonesFeatureGroup!.remove();
 
             this.isolatedLayer = clickedLayer;
             this.isZoneIsolated = true;
 
-            clickedLayer.addTo(mapInstance); // Add the isolated layer to the map
+            clickedLayer.addTo(mapInstance);
 
-            // 2. ZOOM: Use a forced invalidation pattern to guarantee the zoom executes.
-
-            // a. Invalidate size first
             mapInstance.invalidateSize(true);
 
-            // b. Apply fitBounds
             mapInstance.fitBounds(bounds, {
               padding: [50, 50],
               maxZoom: 18,
             });
-
-            // 3. Prevent map from restoring the full view immediately
-            // The 'renderZones' function now checks this.isZoneIsolated and stops rendering the feature group.
           }
         });
         this.zonesFeatureGroup!.addLayer(vectorLayer);
@@ -443,19 +430,20 @@ export class DataPointIndoorMapComponent
   private updateMapLevel(level: MapConfigurationLevel) {
     const map = this.map!;
 
-    // Clear the existing zones feature group first
     if (this.zonesFeatureGroup) {
       this.zonesFeatureGroup.clearLayers();
     }
 
-    // Clear all other layers
+    if (this.markersLayer) {
+      this.markersLayer.clearLayers();
+    }
+
     map.eachLayer((layer) => {
-      if (layer !== this.zonesFeatureGroup) {
+      if (layer !== this.zonesFeatureGroup && layer !== this.markersLayer && !(layer instanceof this.leaf.TileLayer)) {
         layer.removeFrom(map);
       }
     });
 
-    // Add the base tile layer
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
@@ -463,10 +451,8 @@ export class DataPointIndoorMapComponent
       })
       .addTo(map);
 
-    // Fetch the bounds using the shared calculateBounds function
     const bounds = this.calculateBounds();
 
-    // If no valid bounds are returned, return early
     if (!bounds) {
       return;
     }
@@ -485,7 +471,6 @@ export class DataPointIndoorMapComponent
       map.setView(center, zoom);
       map.fitBounds(imageOverlay.getBounds());
 
-      // Add event listeners for zoom and drag
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onZoomEnd());
@@ -499,55 +484,120 @@ export class DataPointIndoorMapComponent
 
   public toggleZoneVisibility(): void {
     if (!this.map) return;
-    this.renderZones(this.map); // Rerun renderZones, which will show/hide based on this.showZones
+    this.renderZones(this.map);
   }
+
   /**
-   * initialize the map markers for the current floor level
+   * Initializes (or re-initializes) the map markers for the current floor level,
+   * applying the current search filter.
    */
   private initMarkers(map: L.Map, level: number): void {
     if (!this.isMarkersAvailableForCurrentFloorLevel(level)) {
       return;
     }
 
-    console.log("Initializing markers for level:", level);
-    console.log(this.markerManagedObjectsForFloorLevel);
-    console.log(
-      "Marker managed objects:",
+    // 1. Clear existing markers layer if it exists
+    if (this.markersLayer) {
+      this.markersLayer.clearLayers();
+      this.markersLayer.removeFrom(map);
+    }
+
+    const allMarkerManagedObjects = Object.values(
       this.markerManagedObjectsForFloorLevel[level]
     );
 
-    const markerManagedObjects = Object.values(
-      this.markerManagedObjectsForFloorLevel[level]
-    );
+    // 2. Filter the markers based on searchString AND selectedType
+    const filteredMarkers = this.filterMarkersBySearchString(allMarkerManagedObjects, this.searchString);
 
-    this.addMarkersToLevel(markerManagedObjects, map);
+    // 3. Add the markers to a new layer
+    this.addMarkersToLevel(allMarkerManagedObjects, map, filteredMarkers);
   }
 
   /**
+   * Filters the list of managed objects based on the search string AND selected type.
+   * Searches in 'name', 'type', and 'id' and all string fields for the searchString.
+   */
+  private filterMarkersBySearchString(
+    managedObjects: MarkerManagedObject[],
+    searchString: string
+  ): MarkerManagedObject[] {
+    const term = searchString ? searchString.toLowerCase().trim() : "";
+
+    return managedObjects.filter((mo: IManagedObject) => {
+      // 1. Filter by selected Type first
+      if (this.selectedType && mo["type"] !== this.selectedType) {
+        return false;
+      }
+
+      // 2. Filter by Search String (if present)
+      if (!term) {
+        return true; // No search term, so it passed the type filter
+      }
+
+      // Check Name
+      if (mo["name"] && mo["name"].toLowerCase().includes(term)) {
+        return true;
+      }
+      // Check Type
+      if (mo["type"] && mo["type"].toLowerCase().includes(term)) {
+        return true;
+      }
+      // Check ID (as string)
+      if (mo.id && mo.id.toString().toLowerCase().includes(term)) {
+        return true;
+      }
+      // Check other fields (generic approach)
+      for (const key in mo) {
+        if (Object.prototype.hasOwnProperty.call(mo, key)) {
+          const value = (mo as any)[key];
+          if (typeof value === 'string' && value.toLowerCase().includes(term)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+  }
+
+
+  /**
    * create and add marker instances for the current floor level and add these
-   * to the map. Register an event listener for click events to display the
-   * corresponding popup with latest measurements.
+   * to the map.
    *
-   * @param markerManagedObjects managed objects with geolocations, which should
-   * be displayed on the map
+   * @param allMarkerManagedObjects All devices for the level.
+   * @param map The Leaflet map instance.
+   * @param filteredMarkers The subset of devices that match the search filter (for highlighting).
    */
   private addMarkersToLevel(
-    markerManagedObjects: MarkerManagedObject[],
-    map: L.Map
+    allMarkerManagedObjects: MarkerManagedObject[],
+    map: L.Map,
+    filteredMarkers: MarkerManagedObject[]
   ): void {
-    const markersLayer = this.leaf.featureGroup().addTo(map);
-    console.log("Adding markers to level:", markerManagedObjects);
-    markerManagedObjects.forEach((markerManagedObject) => {
-      // if (!this.isGeolocationAvailable(markerManagedObject)) {
-      //   return;
-      // }
+    // Initialize or re-initialize the markers layer
+    if (this.markersLayer) {
+      this.markersLayer.clearLayers();
+    } else {
+      this.markersLayer = this.leaf.featureGroup();
+    }
+
+    this.markersLayer.addTo(map);
+
+    // Create a set of IDs for quick lookup of filtered markers
+    const filteredIds = new Set(filteredMarkers.map(mo => mo.id));
+
+    allMarkerManagedObjects.forEach((markerManagedObject) => {
       if (!markerManagedObject["c8y_Position"]) {
         return;
       }
 
+      const isFiltered = filteredIds.has(markerManagedObject.id);
+
+      // Only add a marker if there's no search term, OR if the search term is active and the marker is filtered.
+      // This logic will be simpler: just add ALL markers and let the highlight handle visibility difference.
+
       const circleMarkerInstance =
-        this.createCircleMarkerInstance(markerManagedObject).addTo(
-          markersLayer
+        this.createCircleMarkerInstance(markerManagedObject, isFiltered).addTo(
+          this.markersLayer! // Use the class property FeatureGroup
         );
 
       markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] = circleMarkerInstance;
@@ -559,50 +609,53 @@ export class DataPointIndoorMapComponent
    * current primary measurement and the defined thresholds.
    *
    * @param managedObject
+   * @param isFiltered True if this marker matches the current search filter (searchString or selectedType).
    * @returns circle marker instance
    */
   private createCircleMarkerInstance(
-    managedObject: MarkerManagedObject
+    managedObject: MarkerManagedObject,
+    isFiltered: boolean
   ): L.CircleMarker {
-    // return this.leaf.circleMarker([get(managedObject, 'c8y_Position.lat'), get(managedObject, 'c8y_Position.lng')], {
-    //   fillColor: this.getBackgroundColor(managedObject[this.KEY_LATEST_MEASUREMENT]),
-    //   fillOpacity: 0.75,
-    //   radius: 40,
-    //   weight: 0,
-    //   interactive: true,
-    // });
+
     const position = get(managedObject, "c8y_Position") as
       | { lat: number; lng: number }
       | undefined;
-    if (!position) {
-      // Fallback position with default style, though this should never happen due to earlier check
-      return this.leaf.circleMarker([0, 0], {
-        fillColor: this.MARKER_DEFAULT_COLOR,
-        fillOpacity: 0.75,
-        radius: 13,
-        weight: 0,
-        interactive: true,
-      });
-    }
-    return this.leaf.circleMarker([position.lat, position.lng], {
-      fillColor: this.getBackgroundColor(
-        managedObject[this.KEY_LATEST_MEASUREMENT]
-      ),
+
+    const baseColor = this.getBackgroundColor(
+      managedObject[this.KEY_LATEST_MEASUREMENT]
+    );
+
+    const markerStyle: L.CircleMarkerOptions = {
+      fillColor: baseColor,
       fillOpacity: 0.75,
       radius: 13,
       weight: 0,
       interactive: true,
-    });
+    };
+
+    const isFilterActive = this.searchString.trim().length > 0 || this.selectedType.length > 0;
+
+    if (isFiltered && isFilterActive) {
+      // Apply highlight style
+      markerStyle.color = this.MARKER_HIGHLIGHT_COLOR; // Stroke color
+      markerStyle.weight = 3; // Thicker stroke
+      markerStyle.fillOpacity = 0.9; // Slightly brighter fill
+    } else if (isFilterActive && !isFiltered) {
+      // If searching/filtering but this item isn't filtered, make it faded/less visible
+      markerStyle.fillOpacity = 0.15;
+      markerStyle.color = 'rgba(0,0,0,0.1)';
+      markerStyle.weight = 1;
+    }
+
+
+    if (!position) {
+      // Fallback position
+      return this.leaf.circleMarker([0, 0], markerStyle);
+    }
+
+    return this.leaf.circleMarker([position.lat, position.lng], markerStyle);
   }
 
-  /**
-   * get the background color based on the thresholds which have been defined
-   * in the widgets configuration. If there aren't any thresholds return the
-   * default color
-   *
-   * @param measurement
-   * @returns color as hex string
-   */
   private getBackgroundColor(measurement: Measurement | undefined): string {
     if (!measurement) {
       return this.MARKER_DEFAULT_COLOR;
@@ -619,9 +672,40 @@ export class DataPointIndoorMapComponent
     );
   }
 
+  /**
+   * Helper method to extract unique device types from the current floor's markers.
+   */
+  public getUniqueDeviceTypes(): string[] {
+    if (!this.isMarkersAvailableForCurrentFloorLevel(this.currentFloorLevel)) {
+      return [];
+    }
+
+    const allMarkers = Object.values(
+      this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]
+    );
+
+    const types = allMarkers
+      .map((mo) => mo["type"])
+      .filter((type): type is string => !!type); // Filter out undefined/null and assert string
+
+    return [...new Set(types)].sort(); // Get unique types and sort them
+  }
+
+
+  /**
+   * Getter for the data grid: Filters all managed objects based on the current search string and selected type.
+   */
   public getManagedObjectsForCurrentFloorLevel(): IManagedObject[] {
-    return this.markerManagedObjectsForFloorLevel[this.currentFloorLevel] 
+    const allMarkers = this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]
       ? Object.values(this.markerManagedObjectsForFloorLevel[this.currentFloorLevel])
       : [];
+
+    // Apply the same filtering logic used for the map markers to the data grid list
+    this.filteredDevicesForGrid = this.filterMarkersBySearchString(
+      allMarkers,
+      this.searchString
+    );
+
+    return this.filteredDevicesForGrid;
   }
 }
