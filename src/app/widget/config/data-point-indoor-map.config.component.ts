@@ -196,21 +196,17 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   openMapBoundaryModal(): void {
     if (!this.selectedBuilding) return;
-    console.log(
-      "Opening modal to set map boundaries for:",
-      this.selectedBuilding.name
-    );
-
+    const initialConfigWithRotation = {
+      ...this.selectedBuilding.coordinates,
+      rotationAngle: this.selectedBuilding.rotationAngle || 0,
+    };
     const modalRef = this.modalService.show(GPSComponent, {
-      initialState: { initialConfig: this.selectedBuilding.coordinates } as any,
+      initialState: { initialConfig: initialConfigWithRotation } as any,
       class: "modal-lg",
     });
 
-    console.log(modalRef.content);
-
     modalRef.content?.boundaryChange.subscribe(
       (coordinates: GPSCoordinates) => {
-        console.log("Received new boundary config from modal:", coordinates);
         this.onGpsConfigChange(coordinates);
       }
     );
@@ -219,15 +215,12 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   onZoneCreation() {
     if (!this.selectedBuilding) return;
     const currentCoordinates = this.selectedBuilding?.coordinates || {};
-    console.log("bfre zone", this.selectedBuilding);
-
     const modalRef = this.modalService.show(ZonesComponent, {
       initialState: { initialConfig: this.selectedBuilding } as any,
       class: "modal-lg",
     });
 
     modalRef.content?.boundaryChange.subscribe((newConfig: any) => {
-      console.log("Received new boundary config from modal:", newConfig);
       this.onZoneChange(newConfig);
     });
   }
@@ -303,6 +296,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
     if (this.selectedBuilding) {
       this.selectedBuilding.coordinates = coordinates;
+      this.selectedBuilding.rotationAngle =
+        (coordinates as any).rotationAngle || 0;
     }
     this.isSaved = false;
   }

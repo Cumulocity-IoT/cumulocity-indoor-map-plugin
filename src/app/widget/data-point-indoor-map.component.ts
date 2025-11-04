@@ -8,6 +8,7 @@
  * You may obtain a copy of the License at
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,12 +41,18 @@ import { fromEvent, Subscription, takeUntil } from "rxjs";
 import { EventPollingService } from "./polling/event-polling.service";
 import { get } from "lodash";
 import { BuildingService } from "../services/building.service";
+import { ImageRotateService } from "../services/image-rotate.service";
 
 @Component({
   selector: "data-point-indoor-map",
   templateUrl: "data-point-indoor-map.component.html",
   styleUrls: ["./data-point-indoor-map.component.less"],
-  providers: [MeasurementRealtimeService, EventPollingService, BuildingService],
+  providers: [
+    MeasurementRealtimeService,
+    EventPollingService,
+    BuildingService,
+    ImageRotateService,
+  ],
   encapsulation: ViewEncapsulation.None,
 })
 export class DataPointIndoorMapComponent
@@ -77,7 +84,7 @@ export class DataPointIndoorMapComponent
   eventThresholdSub?: Subscription;
   isLoading = false;
   searchString: string = "";
-  selectedType: string = ""; // <-- New property for the type filter
+  selectedType: string = ""; // New property for the type filter
 
   private zonesFeatureGroup?: L.FeatureGroup;
   public showZones: boolean = false; // Controls visibility of all zones
@@ -90,12 +97,16 @@ export class DataPointIndoorMapComponent
   private markersLayer?: L.FeatureGroup; // Feature group to hold the markers
   private filteredDevicesForGrid: IManagedObject[] = []; // Used for the data grid
 
-  constructor(private buildingService: BuildingService) {}
+  constructor(
+    private buildingService: BuildingService,
+    private imageRotateService: ImageRotateService
+  ) {}
 
   async ngOnInit() {
     console.log("this.config,", this.config.buildingId);
 
     this.leaf = await import("leaflet");
+    this.imageRotateService.initialize(this.leaf);
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -112,7 +123,6 @@ export class DataPointIndoorMapComponent
       this.initMarkers(this.map, level);
     } else {
       this.isLoading = false;
-      // Optionally handle the error case here
     }
     // this.initEventUpdates(level);
   }
@@ -283,21 +293,87 @@ export class DataPointIndoorMapComponent
     return null;
   }
 
+  private getValidatedControlPoints():
+    | {
+        topleft: L.LatLng;
+        topright: L.LatLng;
+        bottomleft: L.LatLng;
+      }
+    | undefined {
+    // 1. Try to get accurate polygon points first (for rotated images)
+    const polygonPoints = this.getPolygonControlPoints();
+    if (polygonPoints) {
+      return polygonPoints;
+    }
+
+    // 2. Fallback: Use the bounding box corners if polygon data is missing
+    const coords = this.building?.coordinates;
+    if (!coords) {
+      return undefined;
+    }
+
+    // Safely extract coordinates, defaulting to 0 for error prevention
+    const topLat = coords.topLeftLat ?? 0;
+    const leftLng = coords.topLeftLng ?? 0;
+    const bottomLat = coords.bottomRightLat ?? 0;
+    const rightLng = coords.bottomRightLng ?? 0;
+
+    // Ensure at least some coordinate data is present (e.g., non-zero) for a valid overlay
+    if (!topLat && !leftLng && !bottomLat && !rightLng) {
+      return undefined;
+    }
+
+    // Create the three LatLng objects using bounding box logic
+    const topleft = this.leaf.latLng(topLat, leftLng);
+    const topright = this.leaf.latLng(topLat, rightLng);
+    const bottomleft = this.leaf.latLng(bottomLat, leftLng);
+
+    return { topleft, topright, bottomleft };
+  }
+
   private initMap(building: MapConfiguration, level: number): L.Map {
     const currentMapConfigurationLevel = building.levels[level];
 
     const bounds = this.calculateBounds();
     if (!bounds) {
-      return this.leaf.map(this.mapReference.nativeElement);
+      // If bounds are completely missing, initialize map without image focus
+      const map = this.leaf.map(this.mapReference.nativeElement);
+      this.leaf.Control.Attribution.prototype.options.prefix = false;
+      this.leaf
+        .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        })
+        .addTo(map);
+      map.setView(this.getCenterCoordinates(this.building?.coordinates), this.building?.zoomLevel);
+      return map;
     }
+
+    const controlPoints = this.getValidatedControlPoints();
+    if (!controlPoints) {
+      // If image control points are missing, but bounds exist, still initialize map
+      const map = this.leaf.map(this.mapReference.nativeElement);
+      this.leaf.Control.Attribution.prototype.options.prefix = false;
+      this.leaf
+        .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        })
+        .addTo(map);
+        map.fitBounds(bounds);
+      return map;
+    }
+    const { topleft, topright, bottomleft } = controlPoints;
 
     const map = this.leaf.map(this.mapReference.nativeElement);
 
-    // Overwrite the default prefix for map controls
     (this.leaf.Control.Attribution.prototype as any).options.prefix = false;
 
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -305,18 +381,23 @@ export class DataPointIndoorMapComponent
 
     if (currentMapConfigurationLevel?.blob) {
       const imgBlobURL = URL.createObjectURL(currentMapConfigurationLevel.blob);
-      this.leaf
-        .imageOverlay(imgBlobURL, bounds, {
+      const imageOverlay = (this.leaf.imageOverlay as any).rotated(
+        imgBlobURL,
+        topleft,
+        topright,
+        bottomleft,
+        {
           opacity: 1,
           interactive: true,
-        })
-        .addTo(map);
+        }
+      );
+      imageOverlay.addTo(map);
 
       const zoom = this.building?.zoomLevel;
       const center = this.getCenterCoordinates(this.building?.coordinates);
 
       map.setView(center, zoom);
-      map.fitBounds(bounds);
+      map.fitBounds(bounds); // Fit map to initial bounds
 
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
@@ -329,7 +410,6 @@ export class DataPointIndoorMapComponent
     this.renderZones(map);
     return map;
   }
-
   private onZoomEnd() {
     /* ... */
   }
@@ -341,18 +421,57 @@ export class DataPointIndoorMapComponent
     );
   }
 
+  private getPolygonControlPoints():
+    | {
+        topleft: L.LatLng;
+        topright: L.LatLng;
+        bottomleft: L.LatLng;
+      }
+    | undefined {
+    if (this.building?.coordinates?.polygonVerticesJson) {
+      try {
+        const polygonData = JSON.parse(
+          this.building.coordinates.polygonVerticesJson
+        );
+        // Assuming polygonData is an array of arrays, and we want the first vertex set
+        const vertices = polygonData[0];
+
+        // Assuming V1=TopLeft, V2=TopRight, V4=BottomLeft of the image area
+        if (vertices && vertices.length >= 4) {
+          const V1 = vertices[0];
+          const V2 = vertices[1];
+          const V4 = vertices[3]; // The fourth point in the array
+
+          // We use the LatLng constructor with the true polygon points
+          // Nullish coalescing is needed here in case polygon points themselves are undefined
+          const topleft = this.leaf.latLng(V1.lat ?? 0, V1.lng ?? 0);
+          const topright = this.leaf.latLng(V2.lat ?? 0, V2.lng ?? 0);
+          const bottomleft = this.leaf.latLng(V4.lat ?? 0, V4.lng ?? 0);
+
+          return { topleft, topright, bottomleft };
+        }
+      } catch (e) {
+        console.error("Failed to parse polygonVerticesJson:", e);
+      }
+    }
+    return undefined;
+  }
+
   getCenterCoordinates(coordinates: any): [number, number] {
     if (coordinates) {
-      const centerLat =
-        (coordinates.topLeftLat + coordinates.bottomRightLat) / 2;
-      const centerLng =
-        (coordinates.topLeftLng + coordinates.bottomRightLng) / 2;
+      const topLeftLat = coordinates.topLeftLat ?? 0;
+      const bottomRightLat = coordinates.bottomRightLat ?? 0;
+      const topLeftLng = coordinates.topLeftLng ?? 0;
+      const bottomRightLng = coordinates.bottomRightLng ?? 0;
+
+      const centerLat = (topLeftLat + bottomRightLat) / 2;
+      const centerLng = (topLeftLng + bottomRightLng) / 2;
+
       return [centerLat, centerLng];
     } else {
       return [51.23544, 6.79599];
     }
   }
-
   private renderZones(map: L.Map): void {
     if (!this.zonesFeatureGroup) {
       this.zonesFeatureGroup = this.leaf.featureGroup().addTo(map);
@@ -427,49 +546,71 @@ export class DataPointIndoorMapComponent
     });
   }
 
+  /**
+   * FIX: Stop changing zoom when level changes.
+   * 1. Get current map zoom before clearing layers.
+   * 2. Remove all calls to map.fitBounds().
+   */
   private updateMapLevel(level: MapConfigurationLevel) {
     const map = this.map!;
+    
+    // FIX: Get the current zoom level before clearing the map
+    const currentZoom = map.getZoom();
 
+    // 1. Clear existing layers (except base tiles)
     if (this.zonesFeatureGroup) {
       this.zonesFeatureGroup.clearLayers();
     }
-
     if (this.markersLayer) {
       this.markersLayer.clearLayers();
     }
-
     map.eachLayer((layer) => {
       if (layer !== this.zonesFeatureGroup && layer !== this.markersLayer && !(layer instanceof this.leaf.TileLayer)) {
         layer.removeFrom(map);
       }
     });
 
+    // 2. Re-add base tile layer
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
       .addTo(map);
 
     const bounds = this.calculateBounds();
-
-    if (!bounds) {
+    const controlPoints = this.getValidatedControlPoints();
+    
+    if (!controlPoints) {
       return;
     }
+    const { topleft, topright, bottomleft } = controlPoints;
 
+    // 3. Load and add the new floor image overlay
     if (level.blob) {
       const imgBlobURL = URL.createObjectURL(level.blob);
-      const imageOverlay = this.leaf.imageOverlay(imgBlobURL, bounds, {
-        opacity: 1,
-        interactive: true,
-      });
+
+      const imageOverlay = (this.leaf.imageOverlay as any).rotated(
+        imgBlobURL,
+        topleft,
+        topright,
+        bottomleft,
+        {
+          opacity: 1,
+          interactive: true,
+        }
+      );
       imageOverlay.addTo(map);
 
-      const zoom = this.building?.zoomLevel;
       const center = this.getCenterCoordinates(this.building?.coordinates);
 
-      map.setView(center, zoom);
-      map.fitBounds(imageOverlay.getBounds());
+      // FIX: Set view using the center of the building and the saved current zoom
+      map.setView(center, currentZoom); 
+      
+      // ❌ REMOVED: map.fitBounds(bounds) and map.fitBounds(imageOverlay.getBounds())
+      // This prevents the map from forcing a new zoom level based on the image size.
+      
 
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
@@ -481,6 +622,7 @@ export class DataPointIndoorMapComponent
       this.renderZones(map);
     }
   }
+
 
   public toggleZoneVisibility(): void {
     if (!this.map) return;
@@ -591,9 +733,6 @@ export class DataPointIndoorMapComponent
       }
 
       const isFiltered = filteredIds.has(markerManagedObject.id);
-
-      // Only add a marker if there's no search term, OR if the search term is active and the marker is filtered.
-      // This logic will be simpler: just add ALL markers and let the highlight handle visibility difference.
 
       const circleMarkerInstance =
         this.createCircleMarkerInstance(markerManagedObject, isFiltered).addTo(

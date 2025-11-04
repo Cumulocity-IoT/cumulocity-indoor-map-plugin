@@ -14,7 +14,7 @@ import {
   ElementRef,
 } from "@angular/core";
 import * as L from "leaflet";
-import { GPSCoordinates } from "../../../models/data-point-indoor-map.model"; // Assuming correct path
+import { GPSCoordinates } from "../../../models/data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
 
 @Component({
@@ -45,23 +45,19 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     br: { lat: 0, lng: 0 },
   });
 
+  public rotationAngle: number = 0;
   constructor(private bsModalRef: BsModalRef) {
     effect(() => {
       const bounds = this.imageBounds();
+      // Draw the saved boundary when bounds or vertices change, ensuring map is initialized
       if (this.map && (bounds.tl.lat !== 0 || this.polygonVertices())) {
         this.drawSavedBoundary(bounds);
       }
     });
-    effect(
-      () => {
-        const bounds = this.imageBounds();
-        this.emitConfigChange(bounds);
-      },
-      { allowSignalWrites: true }
-    );
   }
 
   ngOnInit(): void {
+    // Initialize AABB bounds from config
     if (this.initialConfig?.topLeftLat !== 0) {
       this.imageBounds.set({
         tl: {
@@ -75,6 +71,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     }
 
+    // Initialize Polygon vertices from config
     if ((this.initialConfig as any)?.polygonVerticesJson) {
       try {
         const savedVertices = JSON.parse(
@@ -90,6 +87,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         this.polygonVertices.set(null);
       }
     }
+    // Initialize rotation angle
+    this.rotationAngle = (this.initialConfig as any)?.rotationAngle ?? 0;
   }
 
   ngAfterViewInit(): void {
@@ -101,13 +100,13 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     this.initMap();
 
     if (this.map) {
+      // Invalidate size is necessary because the map starts in a modal/hidden element
       setTimeout(() => {
         this.map!.invalidateSize();
 
-        // Optionally center the map on the loaded boundary if one exists
         const initialBounds = this.imageBounds();
         if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
-          // We can fit the bounds here after the map size is correct
+          // Fit bounds to the loaded geometry after map size is correct
           const southWest = L.latLng(
             initialBounds.br.lat,
             initialBounds.tl.lng
@@ -120,9 +119,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         }
 
         console.log("Map size invalidated for modal rendering.");
-      }, 300); // A 300ms delay is typically safe for most modal animations
+      }, 300); // Wait for modal animation to settle
     }
   }
+
   private initMap(): void {
     // Basic map setup
     this.map = L.map(this.mapReference.nativeElement, {
@@ -158,9 +158,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         dashArray: "5, 5",
         fillOpacity: 0.1,
       });
+      // Use the actual bounds of the polygon
       leafletBounds = (layerToDraw as L.Polygon).getBounds();
     } else if (bounds.tl.lat !== 0) {
-      // NOTE: L.rectangle expects SW and NE, which corresponds to TL/BR for the bounding box.
+      // Use standard rectangle if only AABB is saved
       const southWest = L.latLng(bounds.br.lat, bounds.tl.lng);
       const northEast = L.latLng(bounds.tl.lat, bounds.br.lng);
       leafletBounds = L.latLngBounds(southWest, northEast);
@@ -176,6 +177,18 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (layerToDraw && leafletBounds) {
       this.featureGroup.addLayer(layerToDraw);
+
+      // Apply saved rotation angle (requires Geoman extension)
+      if (this.rotationAngle !== 0 && (layerToDraw as any).setRotation) {
+        (layerToDraw as any).setRotation(this.rotationAngle);
+      }
+
+      // Enable editing and rotation on the drawn layer
+      (layerToDraw as any).pm.enable({
+        allowSelfIntersection: false,
+        rotate: true,
+      });
+
       this.map.fitBounds(leafletBounds);
     }
   }
@@ -189,7 +202,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       br: { lat: br.lat, lng: br.lng },
     });
 
-    this.polygonVertices.set(null);
+    // NOTE: We only set polygonVertices to null if a simple Rectangle is edited
+    // For general edits, the pm:edit/pm:rotateend handlers will update the vertices
   }
 
   private initGeomanControl(): void {
@@ -197,10 +211,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     const mapWithPm = this.map as any;
     this.featureGroup = new L.FeatureGroup();
     this.map.addLayer(this.featureGroup);
-    /*  if (typeof L.PM !== "undefined" && !mapWithPm.pm) {
-      // This is a cleaner way to force the initialization hook without MapManager:
-      mapWithPm.pm.enable(null);
-    } */
 
     mapWithPm.pm.addControls({
       position: "topleft",
@@ -215,10 +225,9 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       dragMode: true,
       cutPolygon: false,
       deleteMode: true,
-      rotateMode: false, // Enable rotation control
+      rotateMode: true,
       allowSelfIntersection: false,
 
-      // Target the layers in the featureGroup for editing
       edit: {
         featureGroup: this.featureGroup,
       },
@@ -231,17 +240,23 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.featureGroup?.clearLayers();
       this.featureGroup?.addLayer(layer);
 
+      // 1. Update AABB bounds regardless of shape type
       if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
         this.updateImageBoundsFromLeaflet(layer.getBounds());
       }
 
-      if (type === "Polygon") {
+      // 2. Update vertices based on shape
+      if (
+        type === "Polygon" ||
+        (type === "Rectangle" && layer.getLatLngs().length > 2)
+      ) {
         this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
       } else if (type === "Rectangle") {
-        this.polygonVertices.set(null);
+        this.polygonVertices.set(null); // Simple rectangle only saves AABB
       }
 
-      layer.pm.enable({ allowSelfIntersection: false });
+      this.emitConfigChange(this.imageBounds());
+      layer.pm.enable({ allowSelfIntersection: false, rotate: true });
     });
 
     mapWithPm.on("pm:edit", (e: any) => {
@@ -249,13 +264,45 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
           this.updateImageBoundsFromLeaflet(layer.getBounds());
         }
+        // Capture updated polygon vertices on edit
         if (layer instanceof L.Polygon) {
+          this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
+        } else if (layer instanceof L.Rectangle) {
+          // If a rectangle is edited/skewed, Geoman may treat it like a polygon internally
+          // We capture the new geometry, which is crucial for the rotated overlay display component
           this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
         } else {
           this.polygonVertices.set(null);
         }
+        this.emitConfigChange(this.imageBounds());
       });
     });
+    mapWithPm.on("pm:rotateend", (e: any) => {
+      const layer = e.layer;
+      console.log(e.layer, "layer");
+      console.log(e.angle, "angle");
+
+      // FIX: Use the official e.angle property provided by Leaflet-Geoman
+      const angle = e.angle || 0;
+
+      // Ensure the angle is captured and updated only if it has changed
+      if (Math.abs(angle - this.rotationAngle) > 0.001) {
+        this.rotationAngle = angle; // Capture the new angle
+
+        // The rotation interaction ensures the LatLngs are updated.
+        if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+          this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
+        }
+
+        // Update AABB bounds after rotation
+        if (layer.getBounds) {
+          this.updateImageBoundsFromLeaflet(layer.getBounds());
+        }
+
+        this.emitConfigChange(this.imageBounds());
+      }
+    });
+
     // Draw existing boundary if any
     const initialBounds = this.imageBounds();
     if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
@@ -290,8 +337,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     const finalConfig = {
       ...this.mapToConfig(this.imageBounds()),
       ...payload,
-      rotationAngle:
-        payload.rotationAngle || this.initialConfig?.rotationAngle || 0,
+      rotationAngle: this.rotationAngle,
     };
     console.log("Emitting GPS Config Change:", finalConfig);
     this.boundaryChange.emit(finalConfig);
@@ -313,7 +359,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSave(): void {
     const bounds = this.imageBounds();
-    this.emitConfigChange(bounds);
+    this.emitConfigChange({});
     this.bsModalRef.hide();
   }
 }
