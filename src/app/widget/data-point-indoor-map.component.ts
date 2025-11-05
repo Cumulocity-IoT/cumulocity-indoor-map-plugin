@@ -452,28 +452,32 @@ export class DataPointIndoorMapComponent
       return [51.23544, 6.79599];
     }
   }
+
+  public restoreZoneView(): void {
+    if (!this.map) return;
+    this.isZoneIsolated = false;
+    if (this.isolatedLayer) {
+      this.map.removeLayer(this.isolatedLayer);
+      this.isolatedLayer = null;
+    }
+    this.renderZones(this.map);
+    const fullBounds = this.calculateBounds();
+    if (fullBounds) {
+      this.map.fitBounds(fullBounds, { padding: [20, 20] });
+    }
+  }
+
   private renderZones(map: L.Map): void {
     if (!this.zonesFeatureGroup) {
       this.zonesFeatureGroup = this.leaf.featureGroup().addTo(map);
     }
 
     this.zonesFeatureGroup.clearLayers();
-
-    if (!this.showZones || !this.building?.coordinates) {
-      // If zones are supposed to be hidden, ensure we are not isolated.
-      this.isolatedLayer = null;
-      this.isZoneIsolated = false;
-      return;
-    }
-
-    // 1. Parse Zones from config (same logic as before)
     const allZonesData = this.building?.allZonesByLevel;
-
     let zonesJsonString;
     if (allZonesData) {
       zonesJsonString = allZonesData[this.currentFloorLevel];
     }
-
     if (!(zonesJsonString && typeof zonesJsonString === "string")) {
       this.loadedZones = [];
       return;
@@ -485,18 +489,23 @@ export class DataPointIndoorMapComponent
       this.loadedZones = [];
       return;
     }
-    if (this.isZoneIsolated && this.isolatedLayer) {
-      this.isolatedLayer.addTo(map);
+
+    if (!this.showZones || !this.loadedZones.length) {
+      this.isolatedLayer = null;
+      this.isZoneIsolated = false;
       return;
     }
-    // 2. Draw each zone and add click handlers
+
+    if (this.isZoneIsolated && this.isolatedLayer) {
+      if (!map.hasLayer(this.isolatedLayer)) {
+        this.isolatedLayer.addTo(map);
+      }
+      return;
+    }
     this.loadedZones.forEach((zone: any) => {
       if (!zone.geometry) return;
-
       const layer = this.leaf.geoJSON(zone.geometry);
-
       layer.eachLayer((vectorLayer) => {
-        // Check if it's a vector layer (L.Path) for styling
         if (vectorLayer instanceof this.leaf.Path) {
           (vectorLayer as any).setStyle({
             color: "#0000FF",
@@ -504,25 +513,22 @@ export class DataPointIndoorMapComponent
             fillOpacity: 0.3,
           });
         }
+
         vectorLayer.on("click", (e: L.LeafletMouseEvent) => {
           const clickedLayer = e.target;
           const mapInstance = map;
 
+          // --- ISOLATION MECHANISM ---
           if (clickedLayer.getBounds && clickedLayer.getBounds().isValid()) {
             const bounds = clickedLayer.getBounds();
-
-            this.zonesFeatureGroup!.remove();
-
+            this.zonesFeatureGroup!.clearLayers();
             this.isolatedLayer = clickedLayer;
             this.isZoneIsolated = true;
-
-            clickedLayer.addTo(mapInstance); // Add the isolated layer to the map
-
+            clickedLayer.addTo(mapInstance);
             mapInstance.invalidateSize(true);
-
             mapInstance.fitBounds(bounds, {
               padding: [50, 50],
-              maxZoom: 18,
+              maxZoom: 19,
             });
           }
         });
@@ -530,7 +536,6 @@ export class DataPointIndoorMapComponent
       });
     });
   }
-
   private updateMapLevel(level: MapConfigurationLevel) {
     const map = this.map!;
 

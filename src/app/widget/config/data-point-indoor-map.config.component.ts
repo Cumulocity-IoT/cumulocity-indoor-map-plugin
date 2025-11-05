@@ -294,18 +294,18 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   onGpsConfigChange(coordinates: GPSCoordinates): void {
     console.log("Parent received new config (Boundaries):", coordinates);
 
-    if (this.selectedBuilding) {
+    if (this.selectedBuilding && coordinates) {
       this.selectedBuilding.coordinates = coordinates;
       this.selectedBuilding.rotationAngle =
-        (coordinates as any).rotationAngle || 0;
+        (coordinates as any)?.rotationAngle || 0;
     }
     this.isSaved = false;
   }
 
   onZoneChange(newConfig: any): void {
     console.log("Parent received new config (Zones):", newConfig);
-    if (this.selectedBuilding) {
-      this.selectedBuilding.allZonesByLevel = newConfig.allZonesByLevel;
+    if (this.selectedBuilding && newConfig) {
+      this.selectedBuilding.allZonesByLevel = newConfig?.allZonesByLevel;
     }
     this.isSaved = false;
   }

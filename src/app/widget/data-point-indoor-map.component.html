@@ -16,6 +16,9 @@
         />
         Show Zones
       </label>
+      <button *ngIf="isZoneIsolated" (click)="restoreZoneView()">
+        Restore Full Floor View
+      </button>
     </div>
     <div *ngIf="(building?.levels?.length || 0) > 1">
       <div class="c8y-select-wrapper">
