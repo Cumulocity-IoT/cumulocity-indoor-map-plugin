@@ -65,7 +65,7 @@
       >
         <option value="">All Types</option>
         <option
-          *ngFor="let type of getUniqueDeviceTypes()"
+          *ngFor="let type of uniqueDeviceTypes"
           value="{{ type }}"
           title="{{ type }}"
         >
@@ -113,6 +113,6 @@
   </div>
 
   <map-data-grid
-    [devices]="getManagedObjectsForCurrentFloorLevel()"
+    [devices]="filteredDevicesForGrid"
   ></map-data-grid>
 </div>
