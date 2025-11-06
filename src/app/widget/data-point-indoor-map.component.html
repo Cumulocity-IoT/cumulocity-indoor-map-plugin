@@ -88,10 +88,16 @@
       />
       <span></span>
       Show Zones
+
+      <button
+        type="button"
+        class="btn btn-clean"
+        *ngIf="isZoneIsolated"
+        (click)="restoreZoneView()"
+      >
+        Restore View
+      </button>
     </label>
-    <button *ngIf="isZoneIsolated" (click)="restoreZoneView()">
-      Restore Full Floor View
-    </button>
   </div>
 </div>
 
