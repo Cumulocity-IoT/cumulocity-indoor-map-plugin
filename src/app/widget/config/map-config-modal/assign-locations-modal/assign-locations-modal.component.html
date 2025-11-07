@@ -43,6 +43,8 @@
         [topleftLng]="topLeftLng ?? 0"
         [bottomrightLat]="bottomRightLat ?? 0"
         [bottomrightLng]="bottomRightLng ?? 0"
+        [polygonVerticesJson]="building.coordinates.polygonVerticesJson"
+        [rotationAngle]="building.coordinates.rotationAngle ?? 0"
         (positionChanged)="onMapPositionChanged($event)"
       >
       </move-marker-map>
@@ -50,5 +52,7 @@
   </div>
 </div>
 <div class="modal-footer">
-  <button type="button" class="btn btn-default" (click)="onClose()">Close</button>
+  <button type="button" class="btn btn-default" (click)="onClose()">
+    Close
+  </button>
 </div>

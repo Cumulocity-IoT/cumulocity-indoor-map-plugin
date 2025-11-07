@@ -9,8 +9,8 @@ import {
   ViewEncapsulation,
   OnChanges,
   SimpleChanges,
-  Output, // ⬅️ NEW
-  EventEmitter, // ⬅️ NEW
+  Output,
+  EventEmitter,
 } from "@angular/core";
 import { CoreModule } from "@c8y/ngx-components";
 import type * as L from "leaflet";
@@ -18,8 +18,8 @@ import { MarkerManagedObject } from "../../../../models/data-point-indoor-map.mo
 
 // Define the structure of the position data being emitted
 interface PositionData {
-    lat: number;
-    lng: number;
+  lat: number;
+  lng: number;
 }
 
 @Component({
@@ -36,7 +36,7 @@ export class MoveMarkerMapComponent
   leaf!: Promise<typeof L>;
   map?: L.Map;
   private imageLayer?: L.ImageOverlay;
-  private marker?: L.CircleMarker; 
+  private marker?: L.CircleMarker;
 
   @Input() imageBlob?: Blob;
   @Input() item?: MarkerManagedObject;
@@ -46,8 +46,9 @@ export class MoveMarkerMapComponent
   @Input() bottomrightLat: number = 51.49;
   @Input() bottomrightLng: number = -0.07;
   @Input() zoomLevel: number = 13;
-  
-  // ⬅️ NEW: Emitter for position changes
+  @Input() polygonVerticesJson?: string;
+  @Input() rotationAngle: number = 0;
+
   @Output() positionChanged = new EventEmitter<PositionData>();
 
   @ViewChild("markerMap", { read: ElementRef, static: true })
@@ -62,14 +63,21 @@ export class MoveMarkerMapComponent
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
     await this.waitForMapInitialization();
 
-    if (changes["imageBlob"] && !changes["imageBlob"].firstChange) {
+    if (
+      changes["imageBlob"] ||
+      changes["topleftLat"] ||
+      changes["topleftLng"] ||
+      changes["bottomrightLat"] ||
+      changes["bottomrightLng"] ||
+      changes["polygonVerticesJson"]
+    ) {
       await this.updateImageOverlay();
     }
-    
+
     // Update marker position or existence when the item changes
     if (changes["item"] || (this.map && this.marker)) {
       console.log(changes["item"]);
-        await this.updateMarkerPosition(changes);
+      await this.updateMarkerPosition(changes);
     }
   }
 
@@ -88,69 +96,171 @@ export class MoveMarkerMapComponent
 
     await this.updateImageOverlay();
 
-    // Map centering and fitBounds
-    const center = this.getCenterCoordinates({
-      topLeftLat: this.topleftLat,
-      topLeftLng: this.topleftLng,
-      bottomRightLat: this.bottomrightLat,
-      bottomRightLng: this.bottomrightLng,
-    });
+    const bounds = this.calculateBounds(l);
 
-    const bounds = l.latLngBounds(
-      [this.topleftLat, this.topleftLng],
-      [this.bottomrightLat, this.bottomrightLng]
-    );
+    map.setView(bounds.getCenter(), this.zoomLevel);
+    map.fitBounds(bounds);
 
-    map.setView(center, this.zoomLevel);
-    map.fitBounds(bounds); // Initial fit to the floor bounds
-
-    // Setup marker and click listener
     this.setupMarkerAndClickListener(l, map);
 
-    // Initial map size fix
     this.redrawMap(true);
+  }
+
+  private calculateBounds(l: typeof L): L.LatLngBounds {
+    const southWest = l.latLng(this.bottomrightLat, this.topleftLng);
+    const northEast = l.latLng(this.topleftLat, this.bottomrightLng);
+    return l.latLngBounds(southWest, northEast);
+  }
+
+  private getValidatedControlPoints(
+    l: typeof L
+  ):
+    | { topleft: L.LatLng; topright: L.LatLng; bottomleft: L.LatLng }
+    | undefined {
+    // 1. Prioritize true Polygon vertices
+    if (this.polygonVerticesJson) {
+      try {
+        const polygonData = JSON.parse(this.polygonVerticesJson);
+        const vertices = polygonData[0];
+
+        if (vertices && vertices.length >= 4) {
+          const V1 = vertices[0];
+          const V2 = vertices[1];
+          const V4 = vertices[3];
+
+          const topleft = l.latLng(V1.lat ?? 0, V1.lng ?? 0);
+          const topright = l.latLng(V2.lat ?? 0, V2.lng ?? 0);
+          const bottomleft = l.latLng(V4.lat ?? 0, V4.lng ?? 0);
+
+          return { topleft, topright, bottomleft };
+        }
+      } catch (e) {
+        console.error("Failed to parse polygonVerticesJson for overlay:", e);
+      }
+    }
+
+    // 2. Fallback: Use the bounding box corners
+    if (
+      !this.topleftLat ||
+      !this.topleftLng ||
+      !this.bottomrightLat ||
+      !this.bottomrightLng
+    ) {
+      return undefined;
+    }
+
+    const topleft = l.latLng(this.topleftLat, this.topleftLng);
+    const topright = l.latLng(this.topleftLat, this.bottomrightLng);
+    const bottomleft = l.latLng(this.bottomrightLat, this.topleftLng);
+
+    return { topleft, topright, bottomleft };
+  }
+
+  private async updateImageOverlay(): Promise<void> {
+    if (
+      !this.map ||
+      !this.topleftLat ||
+      !this.topleftLng ||
+      !this.bottomrightLat ||
+      !this.bottomrightLng
+    ) {
+      return;
+    }
+
+    const l = await this.leaf;
+
+    if (this.imageLayer) {
+      this.map.removeLayer(this.imageLayer);
+      const src = this.imageLayer.getElement()?.src;
+      if (src) {
+        URL.revokeObjectURL(src);
+      }
+      this.imageLayer = undefined;
+    }
+
+    if (this.imageBlob) {
+      const controlPoints = this.getValidatedControlPoints(l);
+      const bounds = this.calculateBounds(l);
+
+      if (!controlPoints) {
+        console.warn("Cannot update image overlay: Control points missing.");
+        return;
+      }
+
+      const imgBlobURL = URL.createObjectURL(this.imageBlob);
+
+      const imageOverlayFactory = (l.imageOverlay as any).rotated;
+
+      if (imageOverlayFactory) {
+        this.imageLayer = imageOverlayFactory(
+          imgBlobURL,
+          controlPoints.topleft,
+          controlPoints.topright,
+          controlPoints.bottomleft,
+          {
+            opacity: 1,
+            interactive: true,
+          }
+        ).addTo(this.map);
+      } else {
+        this.imageLayer = l
+          .imageOverlay(imgBlobURL, bounds, {
+            opacity: 1,
+            interactive: true,
+          })
+          .addTo(this.map);
+        console.warn(
+          "L.imageOverlay.rotated not found. Alignment may be incorrect."
+        );
+      }
+
+      this.map.fitBounds(bounds);
+    }
   }
 
   /**
    * Initializes the CircleMarker and sets up the map click listener.
    */
   private setupMarkerAndClickListener(l: typeof L, map: L.Map): void {
-    
     // 1. Initial Marker Setup: ONLY create marker if position exists
     if (this.hasValidPosition()) {
-        const initialPosition = this.getMarkerInitialPosition(l);
-        this.marker = l.circleMarker(initialPosition, {
+      const initialPosition = this.getMarkerInitialPosition(l);
+      this.marker = l
+        .circleMarker(initialPosition, {
+          radius: 8,
+          color: "#0056b3",
+          fillColor: "#3498db",
+          fillOpacity: 0.8,
+          interactive: false,
+        })
+        .addTo(map);
+    }
+
+    // 2. Add Map Click Listener (This listener handles marker creation/repositioning)
+    map.on("click", (event: L.LeafletMouseEvent) => {
+      const newPosition = event.latlng;
+
+      // If marker doesn't exist, create it at the click location
+      if (!this.marker) {
+        this.marker = l
+          .circleMarker(newPosition, {
             radius: 8,
-            color: '#0056b3',
-            fillColor: '#3498db',
+            color: "#0056b3",
+            fillColor: "#3498db",
             fillOpacity: 0.8,
             interactive: false,
-        }).addTo(map);
-    }
-    
-    // 2. Add Map Click Listener (This listener handles marker creation/repositioning)
-    map.on('click', (event: L.LeafletMouseEvent) => {
-        const newPosition = event.latlng;
-        
-        // If marker doesn't exist, create it at the click location
-        if (!this.marker) {
-            this.marker = l.circleMarker(newPosition, {
-                radius: 8,
-                color: '#0056b3',
-                fillColor: '#3498db',
-                fillOpacity: 0.8,
-                interactive: false,
-            }).addTo(map);
-        } else {
-            // If marker exists, reposition it
-            this.marker.setLatLng(newPosition);
-        }
+          })
+          .addTo(map);
+      } else {
+        // If marker exists, reposition it
+        this.marker.setLatLng(newPosition);
+      }
 
-        // 3. Update the item's c8y_Position immediately (by reference)
-        this.updateItemPosition(newPosition.lat, newPosition.lng);
-        
-        // ⬅️ 4. EMIT THE CHANGE to notify the parent
-        this.positionChanged.emit({ lat: newPosition.lat, lng: newPosition.lng });
+      // 3. Update the item's c8y_Position immediately (by reference)
+      this.updateItemPosition(newPosition.lat, newPosition.lng);
+
+      // ⬅️ 4. EMIT THE CHANGE to notify the parent
+      this.positionChanged.emit({ lat: newPosition.lat, lng: newPosition.lng });
     });
   }
 
@@ -158,24 +268,23 @@ export class MoveMarkerMapComponent
    * Checks if the item has valid c8y_Position coordinates.
    */
   private hasValidPosition(): boolean {
-      const pos = this.item?.c8y_Position;
-      return !!pos && pos.lat !== undefined && pos.lng !== undefined;
+    const pos = this.item?.c8y_Position;
+    return !!pos && pos.lat !== undefined && pos.lng !== undefined;
   }
-  
+
   /**
    * Updates the position data on the item input object.
    */
   private updateItemPosition(lat: number, lng: number): void {
     if (this.item) {
-        if (!this.item.c8y_Position) {
-            this.item.c8y_Position = { lat: lat, lng: lng };
-        } else {
-            this.item.c8y_Position.lat = lat;
-            this.item.c8y_Position.lng = lng;
-        }
+      if (!this.item.c8y_Position) {
+        this.item.c8y_Position = { lat: lat, lng: lng };
+      } else {
+        this.item.c8y_Position.lat = lat;
+        this.item.c8y_Position.lng = lng;
+      }
     }
   }
-
 
   public redrawMap(initialDelay: boolean = false): void {
     if (!this.map) {
@@ -193,7 +302,7 @@ export class MoveMarkerMapComponent
     });
   }
 
-  private async updateImageOverlay(): Promise<void> {
+  /*  private async updateImageOverlay(): Promise<void> {
     if (
       !this.map ||
       !this.topleftLat ||
@@ -231,7 +340,7 @@ export class MoveMarkerMapComponent
 
       this.map.fitBounds(bounds);
     }
-  }
+  } */
 
   private async waitForMapInitialization(): Promise<void> {
     if (this.map) return Promise.resolve();
@@ -255,42 +364,44 @@ export class MoveMarkerMapComponent
 
     // 1. Handle Removal: If position is invalid, remove the marker
     if (!hasPosition) {
-        if (this.marker) {
-            this.map.removeLayer(this.marker);
-            this.marker = undefined;
-        }
-        return;
+      if (this.marker) {
+        this.map.removeLayer(this.marker);
+        this.marker = undefined;
+      }
+      return;
     }
-    
+
     // --- Position is valid (hasPosition === true) ---
-    
+
     const newPosition = this.getMarkerInitialPosition(l);
 
     // 2. Handle Creation: If position is valid but marker doesn't exist
     if (!this.marker) {
-        this.marker = l.circleMarker(newPosition, {
-            radius: 8,
-            color: '#0056b3',
-            fillColor: '#3498db',
-            fillOpacity: 0.8,
-            interactive: false,
-        }).addTo(this.map);
-    } 
+      this.marker = l
+        .circleMarker(newPosition, {
+          radius: 8,
+          color: "#0056b3",
+          fillColor: "#3498db",
+          fillOpacity: 0.8,
+          interactive: false,
+        })
+        .addTo(this.map);
+    }
     // 3. Handle Movement: If both exist, move the marker
     else {
-        this.marker.setLatLng(newPosition);
+      this.marker.setLatLng(newPosition);
     }
-    
+
     // We explicitly avoid calling map.setView() here to keep the view on the floor bounds.
   }
 
   private getMarkerInitialPosition(l: typeof L): L.LatLngExpression {
-    const itemPosition = this.item?.c8y_Position; 
-    
+    const itemPosition = this.item?.c8y_Position;
+
     if (this.hasValidPosition()) {
       return [itemPosition!.lat, itemPosition!.lng];
-    } 
-    return [0, 0]; 
+    }
+    return [0, 0];
   }
 
   getCenterCoordinates(coordinates: any): [number, number] {
@@ -305,4 +416,3 @@ export class MoveMarkerMapComponent
     }
   }
 }
-

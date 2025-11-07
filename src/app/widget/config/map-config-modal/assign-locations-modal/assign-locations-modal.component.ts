@@ -22,6 +22,8 @@ import { Subject, takeUntil } from "rxjs";
 import { DomSanitizer, SafeUrl } from "@angular/platform-browser";
 import { AlertService } from "@c8y/ngx-components";
 import { BsModalRef } from "ngx-bootstrap/modal";
+import type * as L from "leaflet";
+import { ImageRotateService } from "../../../../services/image-rotate.service";
 
 @Component({
   selector: "assign-locations-step",
@@ -31,7 +33,11 @@ import { BsModalRef } from "ngx-bootstrap/modal";
 })
 export class AssignLocationModalComponent implements OnInit, OnDestroy {
   selectedLevel?: MapConfigurationLevel;
-  selectedItem?: {id : string, name ?: string, c8y_Position ?: {lat: number, lng: number}};
+  selectedItem?: {
+    id: string;
+    name?: string;
+    c8y_Position?: { lat: number; lng: number };
+  };
   selectedItemIsSensor = false;
   @Input() building!: MapConfiguration;
 
@@ -47,19 +53,24 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
   bottomRightLng: number | undefined;
   bottomRightLat: number | undefined;
 
+  leaf!: typeof L;
   constructor(
     private inventory: InventoryService,
     private binaryService: InventoryBinaryService,
     private filesService: FilesService,
     private sanitizer: DomSanitizer,
     private alertService: AlertService,
-    private bsModalRef: BsModalRef
+    private bsModalRef: BsModalRef,
+    private imageRotateService: ImageRotateService
   ) {}
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
+    this.leaf = await import("leaflet");
+    this.imageRotateService.initialize(this.leaf);
+
     this.selectLevel(this.building.levels[0]);
     console.log(this.building);
-    console.log(this.selectedLevel)
+    console.log(this.selectedLevel);
     if (
       this.building.coordinates.bottomRightLat &&
       this.building.coordinates.bottomRightLng &&
@@ -78,7 +89,7 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  selectItem(device: {id : string, name ?: string}) {
+  selectItem(device: { id: string; name?: string }) {
     this.selectedItem = device;
   }
 

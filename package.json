@@ -2,7 +2,7 @@
   "author": "PS",
   "description": "Display markers on a indoor map and their datapoints",
   "name": "cumulocity-indoor-map",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "scripts": {
     "ng": "ng",
     "start": "ng serve -u https://iot-strategy2022.eu-latest.cumulocity.com/ --shell cockpit-1021",
