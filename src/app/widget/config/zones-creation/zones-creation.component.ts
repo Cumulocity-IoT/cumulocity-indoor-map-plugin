@@ -325,7 +325,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       drawCircle: false,
       drawRectangle: true,
       drawPolygon: true,
-
+      drawText: false,
       editMode: true,
       dragMode: true,
       cutPolygon: false,

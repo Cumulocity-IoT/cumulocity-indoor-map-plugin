@@ -219,7 +219,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       drawPolyline: false,
       drawCircle: false,
       drawRectangle: true,
-      drawPolygon: true,
+      drawPolygon: false,
+      drawText: false,
 
       editMode: true,
       dragMode: true,
