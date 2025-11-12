@@ -58,8 +58,6 @@ export interface MapConfiguration {
   id?: string;
   name: string;
   coordinates: GPSCoordinates;
-  zoomLevel?: number;
-  rotationAngle: number;
   location: string;
   assetType: string;
   levels: MapConfigurationLevel[];
@@ -75,6 +73,7 @@ export interface GPSCoordinates {
   polygonVerticesJson?: string;
   placementMode?: string;
   rotationAngle?: number;
+  zoomLevel?: number;
 }
 
 export function isMapConfigutaration(obj: any): obj is MapConfiguration {

@@ -127,8 +127,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       coordinates: {},
       location: "",
       assetType: "",
-      zoomLevel: 18,
-      rotationAngle: 0,
       levels: [],
       type: "c8y_Building",
     };
@@ -198,7 +196,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     if (!this.selectedBuilding) return;
     const initialConfigWithRotation = {
       ...this.selectedBuilding.coordinates,
-      rotationAngle: this.selectedBuilding.rotationAngle || 0,
+      rotationAngle: this.selectedBuilding.coordinates.rotationAngle || 0,
     };
     const modalRef = this.modalService.show(GPSComponent, {
       initialState: { initialConfig: initialConfigWithRotation } as any,
@@ -296,8 +294,9 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
     if (this.selectedBuilding && coordinates) {
       this.selectedBuilding.coordinates = coordinates;
-      this.selectedBuilding.rotationAngle =
+      this.selectedBuilding.coordinates.rotationAngle =
         (coordinates as any)?.rotationAngle || 0;
+      this.selectedBuilding.coordinates.zoomLevel = coordinates.zoomLevel;
     }
     this.isSaved = false;
   }

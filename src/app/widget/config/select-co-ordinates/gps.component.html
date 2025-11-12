@@ -11,6 +11,21 @@
         Draw a rectangle/polygon on the map to define the image bounds.
       </p>
     </div>
+    <div class="col-md-12">
+      <div class="form-group">
+        <label for="range1">Zoom Level</label>
+        <c8y-range
+          class="label-bottom"
+          name="zoomLevel"
+          #range
+          [(ngModel)]="currentZoomLevel"
+          (change)="zoomLevelChanged()"
+        >
+          <input type="range" min="0" max="23" step="1" />
+        </c8y-range>
+      </div>
+    </div>
+
     <div class="col-md-12" style="display: contents">
       <div class="marker-map-container">
         <div class="marker-map-frame">

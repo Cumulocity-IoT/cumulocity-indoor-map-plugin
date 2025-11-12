@@ -46,6 +46,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   public rotationAngle: number = 0;
+  public currentZoomLevel: number = 15;
   constructor(private bsModalRef: BsModalRef) {
     effect(() => {
       const bounds = this.imageBounds();
@@ -69,6 +70,9 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
           lng: this.initialConfig?.bottomRightLng ?? 0,
         },
       });
+      this.currentZoomLevel = Math.floor(
+        (this.initialConfig as any)?.zoomLevel ?? this.currentZoomLevel
+      );
     }
 
     // Initialize Polygon vertices from config
@@ -115,9 +119,11 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
             initialBounds.tl.lat,
             initialBounds.br.lng
           );
-          this.map!.fitBounds(L.latLngBounds(southWest, northEast));
+          this.map!.fitBounds(L.latLngBounds(southWest, northEast), {
+            maxZoom: this.currentZoomLevel,
+            animate: false, // Optional: use false to ensure immediate application
+          });
         }
-
         console.log("Map size invalidated for modal rendering.");
       }, 300); // Wait for modal animation to settle
     }
@@ -127,11 +133,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     // Basic map setup
     this.map = L.map(this.mapReference.nativeElement, {
       center: [52.52, 13.4],
-      zoom: 15,
+      zoom: this.currentZoomLevel,
     });
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
       attribution:
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
@@ -189,7 +194,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         rotate: true,
       });
 
-      this.map.fitBounds(leafletBounds);
+      this.map.fitBounds(leafletBounds, {
+        maxZoom: this.currentZoomLevel,
+        animate: false,
+      });
     }
   }
 
@@ -339,9 +347,18 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       ...this.mapToConfig(this.imageBounds()),
       ...payload,
       rotationAngle: this.rotationAngle,
+      zoomLevel: this.currentZoomLevel,
     };
     console.log("Emitting GPS Config Change:", finalConfig);
     this.boundaryChange.emit(finalConfig);
+  }
+
+  zoomLevelChanged(): void {
+    const zoomValue = Math.floor(this.currentZoomLevel);
+    if (this.map && zoomValue !== this.map.getZoom()) {
+      this.currentZoomLevel = zoomValue;
+      this.map.setZoom(zoomValue);
+    }
   }
 
   ngOnDestroy(): void {

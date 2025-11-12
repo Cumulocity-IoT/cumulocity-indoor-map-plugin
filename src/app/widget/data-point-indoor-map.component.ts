@@ -81,7 +81,7 @@ export class DataPointIndoorMapComponent
   destroy$ = new EventEmitter<void>();
 
   private markersLayer?: L.FeatureGroup; // Feature group to hold the markers
-  
+
   // 1. OPTIMIZATION: New properties to replace getters
   public filteredDevicesForGrid: IManagedObject[] = []; // Used for the data grid
   public uniqueDeviceTypes: string[] = []; // Used for the type select dropdown
@@ -93,7 +93,6 @@ export class DataPointIndoorMapComponent
   ) {}
 
   async ngOnInit() {
-
     this.leaf = await import("leaflet");
     this.imageRotateService.initialize(this.leaf);
   }
@@ -108,9 +107,9 @@ export class DataPointIndoorMapComponent
       const level = this.currentFloorLevel;
       await this.loadLatestPrimaryMeasurementForMarkers(level);
       this.initMeasurementUpdates(level);
-      
+
       this.map = this.initMap(this.building, level);
-      
+
       // 1. OPTIMIZATION: Update data properties after map and markers are ready
       this.initMarkers(this.map, level);
       this.updateFilterProperties();
@@ -136,7 +135,7 @@ export class DataPointIndoorMapComponent
   async onLevelChanged() {
     this.isLoading = true;
     this.cd.detectChanges(); // Show loading
-    
+
     const level = this.currentFloorLevel;
     this.buildingService.unsubscribeAllMeasurements();
     if (this.eventThresholdSub) {
@@ -146,18 +145,18 @@ export class DataPointIndoorMapComponent
     await this.loadLatestPrimaryMeasurementForMarkers(level);
     this.unsubscribeListeners();
     this.initMeasurementUpdates(level);
-    
+
     // Update map view and markers
     this.updateMapLevel(this.building!.levels![level]);
     this.initMarkers(this.map!, level);
-    
+
     // 1. OPTIMIZATION: Update data properties after map and markers are ready
     this.updateFilterProperties();
 
     this.isLoading = false;
     this.cd.detectChanges(); // Hide loading
   }
-  
+
   // 1. OPTIMIZATION: New method to update properties derived from markers
   private updateFilterProperties(): void {
     this.uniqueDeviceTypes = this.calculateUniqueDeviceTypes();
@@ -177,11 +176,13 @@ export class DataPointIndoorMapComponent
     }
     this.updateFilterProperties();
   }
-  
+
   private getAllMarkersForCurrentLevel(): MarkerManagedObject[] {
-      return this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]
-        ? Object.values(this.markerManagedObjectsForFloorLevel[this.currentFloorLevel])
-        : [];
+    return this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]
+      ? Object.values(
+          this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]
+        )
+      : [];
   }
 
   /**
@@ -272,13 +273,14 @@ export class DataPointIndoorMapComponent
             : {},
           { [datapoint]: measurement }
         );
-        
+
         // OPTIMIZATION: Since the marker style might change, update its color.
         // Update marker color (already in place)
-        this.updateMarkerWithColor(deviceId, this.getBackgroundColor(
-            managedObject[this.KEY_LATEST_MEASUREMENT]
-        ));
-        
+        this.updateMarkerWithColor(
+          deviceId,
+          this.getBackgroundColor(managedObject[this.KEY_LATEST_MEASUREMENT])
+        );
+
         // 1. OPTIMIZATION: Manually mark the component for check to update UI components
         // that rely on the updated marker data (e.g., the data grid).
         this.cd.markForCheck();
@@ -362,25 +364,24 @@ export class DataPointIndoorMapComponent
 
     const controlPoints = this.getValidatedControlPoints();
     if (!controlPoints) {
-        // If image control points are missing, but bounds exist, still initialize map
-        const map = this.leaf.map(this.mapReference.nativeElement);
-        this.leaf.Control.Attribution.prototype.options.prefix = false;
-        this.leaf
-          .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19,
-            attribution:
-              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          })
-          .addTo(map);
-        if (bounds) {
-            map.fitBounds(bounds);
-        } else {
-            map.setView(
-                this.getCenterCoordinates(this.building?.coordinates),
-                this.building?.zoomLevel
-            );
-        }
-        return map;
+      // If image control points are missing, but bounds exist, still initialize map
+      const map = this.leaf.map(this.mapReference.nativeElement);
+      this.leaf.Control.Attribution.prototype.options.prefix = false;
+      this.leaf
+        .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        })
+        .addTo(map);
+      if (bounds) {
+        map.fitBounds(bounds);
+      } else {
+        map.setView(
+          this.getCenterCoordinates(this.building?.coordinates),
+          this.building?.coordinates?.zoomLevel
+        );
+      }
+      return map;
     }
     const { topleft, topright, bottomleft } = controlPoints;
 
@@ -390,7 +391,6 @@ export class DataPointIndoorMapComponent
 
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -410,12 +410,15 @@ export class DataPointIndoorMapComponent
       );
       imageOverlay.addTo(map);
 
-      const zoom = this.building?.zoomLevel;
+      const zoom = this.building?.coordinates.zoomLevel;
       const center = this.getCenterCoordinates(this.building?.coordinates);
 
       map.setView(center, zoom);
       if (bounds) {
-          map.fitBounds(bounds); // Fit map to initial bounds
+        map.fitBounds(bounds, {
+          maxZoom: zoom,
+          animate: false,
+        }); // Fit map to initial bounds
       }
 
       fromEvent<L.LeafletEvent>(map, "zoomend")
@@ -567,7 +570,6 @@ export class DataPointIndoorMapComponent
             mapInstance.invalidateSize(true);
             mapInstance.fitBounds(bounds, {
               padding: [50, 50],
-              maxZoom: 19,
             });
             this.cd.markForCheck(); // Update restore button visibility
           }
@@ -584,7 +586,7 @@ export class DataPointIndoorMapComponent
     const map = this.map!;
 
     // FIX: Get the current zoom level before clearing the map
-    const currentZoom = map.getZoom();
+    const currentZoom = this.building?.coordinates?.zoomLevel;
 
     // 1. Clear existing layers (except base tiles)
     if (this.zonesFeatureGroup) {
@@ -606,7 +608,7 @@ export class DataPointIndoorMapComponent
     // 2. Re-add base tile layer
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
+        maxZoom: currentZoom,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -641,8 +643,6 @@ export class DataPointIndoorMapComponent
       // FIX: Set view using the center of the building and the saved current zoom
       map.setView(center, currentZoom);
 
-      // ❌ REMOVED: map.fitBounds(bounds) and map.fitBounds(imageOverlay.getBounds())
-
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onZoomEnd());
@@ -665,7 +665,6 @@ export class DataPointIndoorMapComponent
    * applying the current search filter.
    */
   private initMarkers(map: L.Map, level: number): void {
-
     if (!this.isMarkersAvailableForCurrentFloorLevel(level)) {
       return;
     }
@@ -688,7 +687,6 @@ export class DataPointIndoorMapComponent
 
     // 3. Add the markers to a new layer
     this.addMarkersToLevel(allMarkerManagedObjects, map, filteredMarkers);
-
   }
 
   /**
@@ -699,7 +697,6 @@ export class DataPointIndoorMapComponent
     managedObjects: MarkerManagedObject[],
     searchString: string
   ): MarkerManagedObject[] {
-
     const term = searchString ? searchString.toLowerCase().trim() : "";
 
     const filtered = managedObjects.filter((mo: IManagedObject) => {
@@ -767,7 +764,6 @@ export class DataPointIndoorMapComponent
       }
 
       const isFiltered = filteredIds.has(markerManagedObject.id);
-
 
       const circleMarkerInstance = this.createCircleMarkerInstance(
         markerManagedObject,
@@ -849,7 +845,6 @@ export class DataPointIndoorMapComponent
    * Helper method to calculate unique device types (replacing the old getter).
    */
   private calculateUniqueDeviceTypes(): string[] {
-    
     if (!this.isMarkersAvailableForCurrentFloorLevel(this.currentFloorLevel)) {
       return [];
     }
@@ -863,11 +858,10 @@ export class DataPointIndoorMapComponent
       .filter((type): type is string => !!type); // Filter out undefined/null and assert string
 
     const uniqueTypes = [...new Set(types)].sort(); // Get unique types and sort them
-    
 
     return uniqueTypes;
   }
-  
+
   // 1. OPTIMIZATION: Removed the public getter getManagedObjectsForCurrentFloorLevel()
   // Data grid now uses the public property filteredDevicesForGrid
 }
