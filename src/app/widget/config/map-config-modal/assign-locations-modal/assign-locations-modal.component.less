@@ -5,3 +5,15 @@
 .c8y-list__item.highlighted {
     background-color: var(--c8y-brand-80);
 }
+
+.list-scroll-container {
+  /* Adjust this height (e.g., 50vh or a fixed pixel value) 
+     to fit your modal and screen size. */
+  max-height: 50vh; 
+  
+  /* Enables vertical scrolling if content exceeds max-height */
+  overflow-y: auto; 
+  
+  /* Hides horizontal overflow, although usually not necessary for a list */
+  overflow-x: hidden; 
+}

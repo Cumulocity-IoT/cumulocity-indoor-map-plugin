@@ -22,17 +22,18 @@
           </option>
         </select>
       </div>
-
-      <c8y-list-group class="separator-top">
-        <ng-container *ngFor="let mo of selectedLevel?.markers">
-          <c8y-li
-            [class]="{ highlighted: selectedItem === mo }"
-            (click)="selectItem(mo); selectedItemIsSensor = true"
-            class="nested-li"
-            >{{ mo["name"] }}<c8y-li-icon icon="sensor"></c8y-li-icon
-          ></c8y-li>
-        </ng-container>
-      </c8y-list-group>
+      <div class="list-scroll-container">
+        <c8y-list-group class="separator-top">
+          <ng-container *ngFor="let mo of selectedLevel?.markers">
+            <c8y-li
+              [class]="{ highlighted: selectedItem?.id === mo.id }"
+              (click)="selectItem(mo); selectedItemIsSensor = true"
+              class="nested-li"
+              >{{ mo["name"] }}<c8y-li-icon icon="sensor"></c8y-li-icon
+            ></c8y-li>
+          </ng-container>
+        </c8y-list-group>
+      </div>
     </div>
     <div class="col-md-8" style="height: 60vh">
       <move-marker-map
