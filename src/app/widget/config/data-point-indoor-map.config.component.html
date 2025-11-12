@@ -51,6 +51,13 @@
   <hr />
 
   <div *ngIf="selectedBuilding">
+    <div *ngIf="selectedBuilding.coordinates">
+      <c8y-gps-preview-component
+        [config]="selectedBuilding.coordinates"
+        [binaryId]="selectedBuilding.levels[0].binaryId"
+      ></c8y-gps-preview-component>
+    </div>
+
     <hr />
 
     <div class="legend form-block">Building Configuration</div>
@@ -126,8 +133,6 @@
         <i c8yIcon="map-marker" class="c8y-icon"></i> Edit Device Location
       </button>
     </c8y-form-group>
-
-    <div class="legend form-block">Map Settings</div>
 
     <!--  <c8y-form-group>
       <label>Configure Marker</label>
