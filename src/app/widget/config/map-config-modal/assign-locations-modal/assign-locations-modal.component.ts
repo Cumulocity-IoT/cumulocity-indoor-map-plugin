@@ -90,7 +90,9 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
   }
 
   selectItem(device: { id: string; name?: string }) {
-    this.selectedItem = device;
+    this.inventory.detail(device.id).then((response) => {
+      this.selectedItem = response.data as IManagedObject;
+    });
   }
 
   selectLevel(level: MapConfigurationLevel) {
