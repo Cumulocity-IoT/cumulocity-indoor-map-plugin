@@ -55,6 +55,7 @@ export class DataPointIndoorMapComponent
   private readonly KEY_LATEST_MEASUREMENT = "latestPrimaryMeasurement";
   private readonly KEY_MEASUREMENTS = "measurements";
   private readonly KEY_MAP_MARKER_INSTANCE = "mapMarkerInstance";
+  private readonly MAX_ZOOM = 23;
 
   currentFloorLevel = 0;
   currentLevel?: MapConfigurationLevel;
@@ -373,8 +374,11 @@ export class DataPointIndoorMapComponent
             '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         })
         .addTo(map);
+
       if (bounds) {
-        map.fitBounds(bounds);
+        const zoom = this.building?.coordinates.zoomLevel;
+        const center = this.getCenterCoordinates(this.building?.coordinates);
+        map.setView(center, zoom);
       } else {
         map.setView(
           this.getCenterCoordinates(this.building?.coordinates),
@@ -391,8 +395,7 @@ export class DataPointIndoorMapComponent
 
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        // maxNativeZoom: 20,
-        maxZoom: this.building?.coordinates.zoomLevel,
+        maxZoom: this.MAX_ZOOM,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -416,12 +419,6 @@ export class DataPointIndoorMapComponent
       const center = this.getCenterCoordinates(this.building?.coordinates);
 
       map.setView(center, zoom);
-      if (bounds) {
-        map.fitBounds(bounds, {
-          maxZoom: this.building?.coordinates.zoomLevel,
-          animate: false,
-        }); // Fit map to initial bounds
-      }
 
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
@@ -610,8 +607,7 @@ export class DataPointIndoorMapComponent
     // 2. Re-add base tile layer
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        //  maxNativeZoom: 20,
-        maxZoom: this.building?.coordinates.zoomLevel,
+        maxZoom: this.MAX_ZOOM,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
