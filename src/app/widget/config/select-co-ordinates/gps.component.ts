@@ -12,117 +12,108 @@ import {
   Output,
   ViewChild,
   ElementRef,
-  ChangeDetectorRef,
 } from "@angular/core";
 import * as L from "leaflet";
-import {
-  GPSCoordinates,
-  MapConfigurationLevel,
-} from "../../../models/data-point-indoor-map.model";
+import "@geoman-io/leaflet-geoman-free";
+import { GPSCoordinates } from "../../../models/data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
-import {
-  IManagedObjectBinary,
-  InventoryBinaryService,
-  InventoryService,
-} from "@c8y/client";
-import { FilesService, IFetchWithProgress } from "@c8y/ngx-components";
-import { Subject, takeUntil } from "rxjs";
-import { DomSanitizer, SafeUrl } from "@angular/platform-browser";
+import { InventoryBinaryService } from "@c8y/client";
+import { ImageRotateService } from "../../../services/image-rotate.service";
+
+// Define the required control point structure for the rotated plugin
+interface ControlPoints {
+  tl: L.LatLngExpression;
+  tr: L.LatLngExpression;
+  bl: L.LatLngExpression;
+}
 
 @Component({
   selector: "c8y-gps-component",
   templateUrl: "./gps.component.html",
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrls: ["./gps.component.less"],
+  providers: [ImageRotateService],
   encapsulation: ViewEncapsulation.None,
 })
 export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
-  @Input() initialConfig: any = {
-    topLeftLat: 0,
-    topLeftLng: 0,
-    bottomRightLat: 0,
-    bottomRightLng: 0,
-  };
-
+  @Input() initialConfig: any;
   @Output() boundaryChange = new EventEmitter<GPSCoordinates>();
 
   @ViewChild("boundaryMap", { read: ElementRef, static: true })
   mapReference!: ElementRef;
   private map: L.Map | undefined;
   private featureGroup: L.FeatureGroup | undefined;
-  polygonVertices = signal<L.LatLng[][] | null>(null);
 
+  // State Signals
+  polygonVertices = signal<L.LatLng[][] | null>(null);
   imageBounds = signal({
     tl: { lat: 0, lng: 0 },
     br: { lat: 0, lng: 0 },
   });
 
+  // UI/Config Properties
   public rotationAngle: number = 0;
   public currentZoomLevel: number = 15;
-
-  public showFloorPlan: boolean = false; // State for the toggle
-  public floorPlanOpacity: number = 0.5; // State for the opacity slider (0.0 to 1.0)
+  public showFloorPlan: boolean = false;
+  public floorPlanOpacity: number = 0.5;
   private floorPlanLayer: L.ImageOverlay | undefined;
 
-  isLoadingImage = false;
-  destroy$ = new Subject<void>();
-  progress?: IFetchWithProgress;
-  safeDataUrl?: SafeUrl;
-  imageCache = new Map<string, string>();
-  imageBlob?: Blob;
+  // Image Loading Properties
+  private imageBlob?: Blob;
+  private initialBinaryId?: string;
+
   constructor(
     private bsModalRef: BsModalRef,
-    private cdr: ChangeDetectorRef,
-    private sanitizer: DomSanitizer,
     private binaryService: InventoryBinaryService,
-    private inventory: InventoryService,
-    private filesService: FilesService
+    private imageRotateService: ImageRotateService
   ) {
     effect(() => {
       const bounds = this.imageBounds();
-      // Draw the saved boundary when bounds or vertices change, ensuring map is initialized
-      if (this.map && (bounds.tl.lat !== 0 || this.polygonVertices())) {
+      const vertices = this.polygonVertices();
+
+      // Only run if the map is initialized and we have non-default geometry
+      if (this.map && (bounds.tl.lat !== 0 || vertices)) {
         this.drawSavedBoundary(bounds);
+        this.updateImageOverlayPosition(); // Reposition overlay when geometry changes
       }
     });
   }
 
   ngOnInit(): void {
-    // Initialize AABB bounds from config
-    if (this.initialConfig?.topLeftLat !== 0) {
-      this.imageBounds.set({
-        tl: {
-          lat: this.initialConfig?.topLeftLat ?? 0,
-          lng: this.initialConfig?.topLeftLng ?? 0,
-        },
-        br: {
-          lat: this.initialConfig?.bottomRightLat ?? 0,
-          lng: this.initialConfig?.bottomRightLng ?? 0,
-        },
-      });
-      this.currentZoomLevel = Math.floor(
-        (this.initialConfig as any)?.zoomLevel ?? this.currentZoomLevel
-      );
-    }
+    // Initialize properties from initialConfig
+    const config = this.initialConfig || {};
 
-    // Initialize Polygon vertices from config
-    if ((this.initialConfig as any)?.polygonVerticesJson) {
+    // Initialize AABB bounds
+    this.imageBounds.set({
+      tl: {
+        lat: config.topLeftLat ?? 0,
+        lng: config.topLeftLng ?? 0,
+      },
+      br: {
+        lat: config.bottomRightLat ?? 0,
+        lng: config.bottomRightLng ?? 0,
+      },
+    });
+
+    // Initialize Polygon vertices
+    if (config.polygonVerticesJson) {
       try {
-        const savedVertices = JSON.parse(
-          (this.initialConfig as any).polygonVerticesJson
-        );
-        // Convert plain object array back to L.LatLng objects
+        const savedVertices = JSON.parse(config.polygonVerticesJson);
         const latLngs = savedVertices.map((ring: any[]) =>
           ring.map((v) => L.latLng(v.lat, v.lng))
         );
         this.polygonVertices.set(latLngs);
       } catch (e) {
         console.error("Failed to parse polygon vertices:", e);
-        this.polygonVertices.set(null);
       }
     }
-    // Initialize rotation angle
-    this.rotationAngle = (this.initialConfig as any)?.rotationAngle ?? 0;
+
+    // Initialize numeric properties
+    this.rotationAngle = config.rotationAngle ?? 0;
+    this.currentZoomLevel = Math.floor(
+      config.zoomLevel ?? this.currentZoomLevel
+    );
+    this.initialBinaryId = config.levels?.[0]?.binaryId;
   }
 
   ngAfterViewInit(): void {
@@ -130,46 +121,40 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error("Leaflet library is not loaded.");
       return;
     }
+    // Start async initialization sequence
     this.initializeMapComponent();
   }
 
   private async initializeMapComponent(): Promise<void> {
-    if (this.initialConfig.levels && this.initialConfig.levels[0]?.binaryId) {
-      await this.getImage(this.initialConfig.levels[0]);
+    // 1. Load image if binaryId exists and await its completion
+    if (this.initialBinaryId) {
+      try {
+        await this.getImage(this.initialBinaryId);
+      } catch (e) {
+        console.error("Image loading failed:", e);
+      }
     }
 
-    // 2. Now that imageBlob is set (or loading failed), initialize the map
+    // 2. Initialize Map
     this.initMap();
 
     if (this.map) {
-      // Invalidate size is necessary because the map starts in a modal/hidden element
+      // 3. Post-initialization tasks
       setTimeout(() => {
         this.map!.invalidateSize();
-
-        const initialBounds = this.imageBounds();
-        if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
-          // Fit bounds to the loaded geometry after map size is correct
-          // ... (existing fitBounds logic) ...
-          const southWest = L.latLng(
-            initialBounds.br.lat,
-            initialBounds.tl.lng
-          );
-          const northEast = L.latLng(
-            initialBounds.tl.lat,
-            initialBounds.br.lng
-          );
-          this.map!.fitBounds(L.latLngBounds(southWest, northEast), {
-            maxZoom: 23,
-            animate: false,
-          });
-        }
-        if (this.map) this.setActualZoom();
-        console.log("Map size invalidated for modal rendering.");
+        this.centerMapOnBounds();
+        this.setActualZoom(); // Syncs zoom after fitBounds runs
       }, 300);
     }
   }
 
   private async initMap(): Promise<void> {
+    try {
+      this.imageRotateService.initialize(L);
+    } catch (err) {
+      // Ignore if already initialized
+    }
+
     // Basic map setup
     this.map = L.map(this.mapReference.nativeElement, {
       center: [52.52, 13.4],
@@ -183,119 +168,36 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
 
-    // 2. 🌟 Floor Plan / Overlay Image (Use L.imageOverlay) 🌟
-    // Check if the image Blob is available from the loading process
+    // 2. Image Overlay Setup
     if (this.imageBlob) {
       const imageUrl = URL.createObjectURL(this.imageBlob);
-      const bounds = L.latLngBounds(
-        L.latLng(this.imageBounds().br.lat, this.imageBounds().tl.lng), // SW corner (BR Lat, TL Lng)
-        L.latLng(this.imageBounds().tl.lat, this.imageBounds().br.lng) // NE corner (TL Lat, BR Lng)
-      );
+      const cp = this.getOverlayControlPoints();
+      const rotatedFactory = (L as any).imageOverlay?.rotated;
 
-      // L.imageOverlay is the correct type for placing a single image over a defined area
-      this.floorPlanLayer = L.imageOverlay(imageUrl, bounds, {
-        opacity: this.floorPlanOpacity,
-        interactive: true,
-      });
-
-      // Add it initially if showFloorPlan is true
+      if (rotatedFactory) {
+        this.floorPlanLayer = rotatedFactory(imageUrl, cp.tl, cp.tr, cp.bl, {
+          opacity: this.floorPlanOpacity,
+          interactive: true,
+        }) as L.ImageOverlay;
+      } else {
+        // Fallback to non-rotated standard L.imageOverlay
+        this.floorPlanLayer = L.imageOverlay(imageUrl, this.getImageBounds(), {
+          opacity: this.floorPlanOpacity,
+          interactive: true,
+        });
+      }
       if (this.showFloorPlan) {
-        this.floorPlanLayer.addTo(this.map);
+        (this.floorPlanLayer as any).addTo(this.map);
       }
     } else {
-      console.warn(
-        "Floor plan image not available (this.imageBlob is undefined). Skipping image overlay."
-      );
+      console.warn("Floor plan image not available. Skipping image overlay.");
     }
-    // -----------------------------------------------------
 
     this.initGeomanControl();
     this.map.on("zoomend", () => {
       this.setActualZoom();
     });
   }
-
-  private async getImage(level: MapConfigurationLevel): Promise<Blob> {
-    const imageId = level.binaryId;
-    if (!imageId) {
-      throw new Error("Binary ID is not available");
-    }
-    this.imageBlob = await (
-      (await this.binaryService.download(imageId)) as Response
-    ).blob();
-    return this.imageBlob;
-  }
-
-  private drawSavedBoundary(bounds: {
-    tl: { lat: number; lng: number };
-    br: { lat: number; lng: number };
-  }): void {
-    if (!this.map || !this.featureGroup) return;
-
-    this.featureGroup.clearLayers();
-
-    let layerToDraw: L.Layer | undefined;
-    let leafletBounds: L.LatLngBounds | undefined;
-
-    const vertices = this.polygonVertices();
-    if (vertices) {
-      layerToDraw = L.polygon(vertices, {
-        color: "#ff0000",
-        weight: 1,
-        dashArray: "5, 5",
-        fillOpacity: 0.1,
-      });
-      // Use the actual bounds of the polygon
-      leafletBounds = (layerToDraw as L.Polygon).getBounds();
-    } else if (bounds.tl.lat !== 0) {
-      // Use standard rectangle if only AABB is saved
-      const southWest = L.latLng(bounds.br.lat, bounds.tl.lng);
-      const northEast = L.latLng(bounds.tl.lat, bounds.br.lng);
-      leafletBounds = L.latLngBounds(southWest, northEast);
-
-      layerToDraw = L.rectangle(leafletBounds, {
-        color: "#ff0000",
-        weight: 1,
-        dashArray: "5, 5",
-      });
-    } else {
-      return;
-    }
-
-    if (layerToDraw && leafletBounds) {
-      this.featureGroup.addLayer(layerToDraw);
-
-      // Apply saved rotation angle (requires Geoman extension)
-      if (this.rotationAngle !== 0 && (layerToDraw as any).setRotation) {
-        (layerToDraw as any).setRotation(this.rotationAngle);
-      }
-
-      // Enable editing and rotation on the drawn layer
-      (layerToDraw as any).pm.enable({
-        allowSelfIntersection: false,
-        rotate: true,
-      });
-
-      this.map.fitBounds(leafletBounds, {
-        //   maxZoom: this.currentZoomLevel,
-        animate: false,
-      });
-    }
-  }
-
-  private updateImageBoundsFromLeaflet(bounds: L.LatLngBounds): void {
-    const tl = bounds.getNorthWest(); // Top-Left (North-West)
-    const br = bounds.getSouthEast(); // Bottom-Right (South-East)
-
-    this.imageBounds.set({
-      tl: { lat: tl.lat, lng: tl.lng },
-      br: { lat: br.lat, lng: br.lng },
-    });
-
-    // NOTE: We only set polygonVertices to null if a simple Rectangle is edited
-    // For general edits, the pm:edit/pm:rotateend handlers will update the vertices
-  }
-
   private initGeomanControl(): void {
     if (!this.map) return;
     const mapWithPm = this.map as any;
@@ -373,6 +275,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         } else {
           this.polygonVertices.set(null);
         }
+        this.updateImageOverlayPosition(); // reposition overlay after edits
         this.emitConfigChange(this.imageBounds());
       });
     });
@@ -397,7 +300,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         if (layer.getBounds) {
           this.updateImageBoundsFromLeaflet(layer.getBounds());
         }
-
+        this.updateImageOverlayPosition();
         this.emitConfigChange(this.imageBounds());
       }
     });
@@ -407,6 +310,143 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
       this.drawSavedBoundary(initialBounds);
     }
+  }
+
+  private updateImageBoundsFromLeaflet(bounds: L.LatLngBounds): void {
+    const tl = bounds.getNorthWest(); // Top-Left (North-West)
+    const br = bounds.getSouthEast(); // Bottom-Right (South-East)
+
+    this.imageBounds.set({
+      tl: { lat: tl.lat, lng: tl.lng },
+      br: { lat: br.lat, lng: br.lng },
+    });
+  }
+
+  private getOverlayControlPoints(): ControlPoints {
+    const vertices = this.polygonVertices();
+    const bounds = this.imageBounds();
+    const isRotated = vertices && vertices.length > 0 && vertices[0].length > 4; // Assume >4 vertices means polygon/rotation
+
+    // 1. If Polygon Vertices are present, use the advanced selection logic
+    if (vertices) {
+      const ring = vertices[0];
+
+      // Use the actual LatLng objects directly from the ring
+      if (ring.length >= 4) {
+        // This relies on Geoman storing points sequentially:
+        const tl = ring[0];
+        const tr = ring[1];
+        const bl = ring[3] || ring[2]; // Use index 3 if available, otherwise index 2 (for simple triangles/polygons)
+
+        return { tl, tr, bl };
+      }
+    }
+
+    // 2. Fallback: Axis-aligned bounding box corners (no rotation)
+    const tl = L.latLng(bounds.tl.lat, bounds.tl.lng);
+    const tr = L.latLng(bounds.tl.lat, bounds.br.lng);
+    const bl = L.latLng(bounds.br.lat, bounds.tl.lng); // South-West point
+
+    return { tl, tr, bl };
+  }
+
+  private getImageBounds(): L.LatLngBounds {
+    const bounds = this.imageBounds();
+    return L.latLngBounds(
+      L.latLng(bounds.br.lat, bounds.tl.lng), // SouthWest
+      L.latLng(bounds.tl.lat, bounds.br.lng) // NorthEast
+    );
+  }
+
+  private centerMapOnBounds(): void {
+    const bounds = this.getImageBounds();
+    if (this.map && bounds.isValid()) {
+      this.map.fitBounds(bounds, {
+        maxZoom: this.currentZoomLevel,
+        animate: false,
+      });
+    }
+  }
+
+  private async getImage(imageId: string): Promise<Blob> {
+    if (this.imageBlob) return this.imageBlob; // Avoid double download
+
+    this.imageBlob = await (
+      (await this.binaryService.download(imageId)) as Response
+    ).blob();
+    return this.imageBlob;
+  }
+
+  private updateImageOverlayPosition(): void {
+    if (!this.floorPlanLayer) return;
+
+    const cp = this.getOverlayControlPoints();
+    const layerAny = this.floorPlanLayer as any;
+
+    if (typeof layerAny.reposition === "function") {
+      // Reposition is the official way to move rotated overlays
+      layerAny.reposition(cp.tl, cp.tr, cp.bl);
+      return;
+    }
+
+    // Fallback: This code is necessary if reposition is not available (non-rotated layer or older plugin)
+    if (this.map) {
+      try {
+        this.map.removeLayer(this.floorPlanLayer);
+      } catch {}
+      const imageUrl = layerAny._url || layerAny._rawImage?.src;
+      if (imageUrl) {
+        // Recreate the layer with new bounds
+        this.floorPlanLayer = L.imageOverlay(imageUrl, this.getImageBounds(), {
+          opacity: this.floorPlanOpacity,
+          interactive: true,
+        });
+        if (this.showFloorPlan) (this.floorPlanLayer as any).addTo(this.map);
+      }
+    }
+  }
+
+  private setActualZoom(): void {
+    if (this.map) {
+      const actualZoom = this.map.getZoom();
+      const roundedActualZoom = Math.floor(actualZoom);
+
+      if (this.currentZoomLevel !== roundedActualZoom) {
+        this.currentZoomLevel = roundedActualZoom;
+      }
+    }
+  }
+
+  onToggleFloorPlan(event: any): void {
+    this.showFloorPlan = event.target.checked;
+    if (!this.map || !this.floorPlanLayer) {
+      console.warn("Floor plan layer not initialized or map not ready.");
+      return;
+    }
+
+    if (this.showFloorPlan) {
+      this.floorPlanLayer.addTo(this.map);
+    } else {
+      this.map.removeLayer(this.floorPlanLayer);
+    }
+  }
+
+  onOpacityChange(newOpacity: number): void {
+    this.floorPlanOpacity = newOpacity;
+    if (this.floorPlanLayer && (this.floorPlanLayer as any).setOpacity) {
+      (this.floorPlanLayer as L.ImageOverlay).setOpacity(newOpacity);
+    }
+  }
+
+  private emitConfigChange(payload: any): void {
+    const finalConfig = {
+      ...this.mapToConfig(this.imageBounds()),
+      ...payload,
+      rotationAngle: this.rotationAngle,
+      zoomLevel: this.currentZoomLevel,
+    };
+    console.log("Emitting GPS Config Change:", finalConfig);
+    this.boundaryChange.emit(finalConfig);
   }
 
   private mapToConfig(bounds: {
@@ -432,64 +472,68 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     };
   }
 
-  onToggleFloorPlan(event: any): void {
-    console.log("togg", event);
+  private drawSavedBoundary(bounds: {
+    tl: { lat: number; lng: number };
+    br: { lat: number; lng: number };
+  }): void {
+    if (!this.map || !this.featureGroup) return;
 
-    this.showFloorPlan = event.target.checked;
-    //  this.showFloorPlan = !this.showFloorPlan;
-    console.log(this.showFloorPlan, "toggle");
+    this.featureGroup.clearLayers();
 
-    if (!this.map || !this.floorPlanLayer) {
-      console.warn("Floor plan layer not initialized or map not ready.");
+    let layerToDraw: L.Layer | undefined;
+    let leafletBounds: L.LatLngBounds | undefined;
+
+    const vertices = this.polygonVertices();
+    if (vertices) {
+      layerToDraw = L.polygon(vertices, {
+        color: "#ff0000",
+        weight: 1,
+        dashArray: "5, 5",
+        fillOpacity: 0.1,
+      });
+      // Use the actual bounds of the polygon
+      leafletBounds = (layerToDraw as L.Polygon).getBounds();
+    } else if (bounds.tl.lat !== 0) {
+      // Use standard rectangle if only AABB is saved
+      const southWest = L.latLng(bounds.br.lat, bounds.tl.lng);
+      const northEast = L.latLng(bounds.tl.lat, bounds.br.lng);
+      leafletBounds = L.latLngBounds(southWest, northEast);
+
+      layerToDraw = L.rectangle(leafletBounds, {
+        color: "#ff0000",
+        weight: 1,
+        dashArray: "5, 5",
+      });
+    } else {
       return;
     }
 
-    if (this.showFloorPlan) {
-      this.floorPlanLayer.addTo(this.map);
-    } else {
-      this.map.removeLayer(this.floorPlanLayer);
-    }
-  }
-  onOpacityChange(newOpacity: number): void {
-    this.floorPlanOpacity = newOpacity; // Update component property
-    // Check if the layer is initialized and use its setOpacity method
-    if (this.floorPlanLayer && (this.floorPlanLayer as any).setOpacity) {
-      (this.floorPlanLayer as L.ImageOverlay).setOpacity(newOpacity);
-    }
-  }
+    if (layerToDraw && leafletBounds) {
+      this.featureGroup.addLayer(layerToDraw);
 
-  private emitConfigChange(payload: any): void {
-    const finalConfig = {
-      ...this.mapToConfig(this.imageBounds()),
-      ...payload,
-      rotationAngle: this.rotationAngle,
-      zoomLevel: this.currentZoomLevel,
-    };
-    console.log("Emitting GPS Config Change:", finalConfig);
-    this.boundaryChange.emit(finalConfig);
-  }
-
-  private setActualZoom(): void {
-    if (this.map) {
-      const actualZoom = this.map.getZoom();
-      const roundedActualZoom = Math.floor(actualZoom);
-
-      if (this.currentZoomLevel !== roundedActualZoom) {
-        this.currentZoomLevel = roundedActualZoom;
-        // No need for cdr.detectChanges here as the value is only used for saving (onSave).
+      if (this.rotationAngle !== 0 && (layerToDraw as any).setRotation) {
+        (layerToDraw as any).setRotation(this.rotationAngle);
       }
+
+      (layerToDraw as any).pm.enable({
+        allowSelfIntersection: false,
+        rotate: true,
+      });
+
+      this.map.fitBounds(leafletBounds, {
+        maxZoom: this.currentZoomLevel,
+        animate: false,
+      });
     }
   }
 
   ngOnDestroy(): void {
     if (this.map) {
-      // Clean up Geoman controls and map layers
       (this.map as any).pm.removeControls();
       this.map.off();
       this.map.remove();
     }
   }
-
   onCancel(): void {
     this.boundaryChange.emit();
     this.bsModalRef.hide();
