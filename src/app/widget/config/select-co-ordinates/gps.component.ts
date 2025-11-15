@@ -12,10 +12,22 @@ import {
   Output,
   ViewChild,
   ElementRef,
+  ChangeDetectorRef,
 } from "@angular/core";
 import * as L from "leaflet";
-import { GPSCoordinates } from "../../../models/data-point-indoor-map.model";
+import {
+  GPSCoordinates,
+  MapConfigurationLevel,
+} from "../../../models/data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
+import {
+  IManagedObjectBinary,
+  InventoryBinaryService,
+  InventoryService,
+} from "@c8y/client";
+import { FilesService, IFetchWithProgress } from "@c8y/ngx-components";
+import { Subject, takeUntil } from "rxjs";
+import { DomSanitizer, SafeUrl } from "@angular/platform-browser";
 
 @Component({
   selector: "c8y-gps-component",
@@ -25,7 +37,7 @@ import { BsModalRef } from "ngx-bootstrap/modal";
   encapsulation: ViewEncapsulation.None,
 })
 export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
-  @Input() initialConfig: GPSCoordinates = {
+  @Input() initialConfig: any = {
     topLeftLat: 0,
     topLeftLng: 0,
     bottomRightLat: 0,
@@ -47,7 +59,25 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   public rotationAngle: number = 0;
   public currentZoomLevel: number = 15;
-  constructor(private bsModalRef: BsModalRef) {
+
+  public showFloorPlan: boolean = false; // State for the toggle
+  public floorPlanOpacity: number = 0.5; // State for the opacity slider (0.0 to 1.0)
+  private floorPlanLayer: L.ImageOverlay | undefined;
+
+  isLoadingImage = false;
+  destroy$ = new Subject<void>();
+  progress?: IFetchWithProgress;
+  safeDataUrl?: SafeUrl;
+  imageCache = new Map<string, string>();
+  imageBlob?: Blob;
+  constructor(
+    private bsModalRef: BsModalRef,
+    private cdr: ChangeDetectorRef,
+    private sanitizer: DomSanitizer,
+    private binaryService: InventoryBinaryService,
+    private inventory: InventoryService,
+    private filesService: FilesService
+  ) {
     effect(() => {
       const bounds = this.imageBounds();
       // Draw the saved boundary when bounds or vertices change, ensuring map is initialized
@@ -100,7 +130,15 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error("Leaflet library is not loaded.");
       return;
     }
+    this.initializeMapComponent();
+  }
 
+  private async initializeMapComponent(): Promise<void> {
+    if (this.initialConfig.levels && this.initialConfig.levels[0]?.binaryId) {
+      await this.getImage(this.initialConfig.levels[0]);
+    }
+
+    // 2. Now that imageBlob is set (or loading failed), initialize the map
     this.initMap();
 
     if (this.map) {
@@ -111,6 +149,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         const initialBounds = this.imageBounds();
         if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
           // Fit bounds to the loaded geometry after map size is correct
+          // ... (existing fitBounds logic) ...
           const southWest = L.latLng(
             initialBounds.br.lat,
             initialBounds.tl.lng
@@ -120,28 +159,71 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
             initialBounds.br.lng
           );
           this.map!.fitBounds(L.latLngBounds(southWest, northEast), {
-            maxZoom: this.currentZoomLevel,
-            animate: false, // Optional: use false to ensure immediate application
+            maxZoom: 23,
+            animate: false,
           });
         }
+        if (this.map) this.setActualZoom();
         console.log("Map size invalidated for modal rendering.");
-      }, 300); // Wait for modal animation to settle
+      }, 300);
     }
   }
 
-  private initMap(): void {
+  private async initMap(): Promise<void> {
     // Basic map setup
     this.map = L.map(this.mapReference.nativeElement, {
       center: [52.52, 13.4],
       zoom: this.currentZoomLevel,
     });
 
+    // 1. Base Map Layer (e.g., OpenStreetMap)
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 23,
       attribution:
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
 
+    // 2. 🌟 Floor Plan / Overlay Image (Use L.imageOverlay) 🌟
+    // Check if the image Blob is available from the loading process
+    if (this.imageBlob) {
+      const imageUrl = URL.createObjectURL(this.imageBlob);
+      const bounds = L.latLngBounds(
+        L.latLng(this.imageBounds().br.lat, this.imageBounds().tl.lng), // SW corner (BR Lat, TL Lng)
+        L.latLng(this.imageBounds().tl.lat, this.imageBounds().br.lng) // NE corner (TL Lat, BR Lng)
+      );
+
+      // L.imageOverlay is the correct type for placing a single image over a defined area
+      this.floorPlanLayer = L.imageOverlay(imageUrl, bounds, {
+        opacity: this.floorPlanOpacity,
+        interactive: true,
+      });
+
+      // Add it initially if showFloorPlan is true
+      if (this.showFloorPlan) {
+        this.floorPlanLayer.addTo(this.map);
+      }
+    } else {
+      console.warn(
+        "Floor plan image not available (this.imageBlob is undefined). Skipping image overlay."
+      );
+    }
+    // -----------------------------------------------------
+
     this.initGeomanControl();
+    this.map.on("zoomend", () => {
+      this.setActualZoom();
+    });
+  }
+
+  private async getImage(level: MapConfigurationLevel): Promise<Blob> {
+    const imageId = level.binaryId;
+    if (!imageId) {
+      throw new Error("Binary ID is not available");
+    }
+    this.imageBlob = await (
+      (await this.binaryService.download(imageId)) as Response
+    ).blob();
+    return this.imageBlob;
   }
 
   private drawSavedBoundary(bounds: {
@@ -195,7 +277,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       });
 
       this.map.fitBounds(leafletBounds, {
-        maxZoom: this.currentZoomLevel,
+        //   maxZoom: this.currentZoomLevel,
         animate: false,
       });
     }
@@ -217,8 +299,16 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   private initGeomanControl(): void {
     if (!this.map) return;
     const mapWithPm = this.map as any;
-    this.featureGroup = new L.FeatureGroup();
-    this.map.addLayer(this.featureGroup);
+    if (!mapWithPm.pm) {
+      console.error("Leaflet-Geoman failed to initialize on the map instance.");
+      return;
+    }
+
+    // Ensure featureGroup is initialized and added to the map before setting up controls
+    if (!this.featureGroup) {
+      this.featureGroup = new L.FeatureGroup();
+      this.map.addLayer(this.featureGroup);
+    }
 
     mapWithPm.pm.addControls({
       position: "topleft",
@@ -342,6 +432,32 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     };
   }
 
+  onToggleFloorPlan(event: any): void {
+    console.log("togg", event);
+
+    this.showFloorPlan = event.target.checked;
+    //  this.showFloorPlan = !this.showFloorPlan;
+    console.log(this.showFloorPlan, "toggle");
+
+    if (!this.map || !this.floorPlanLayer) {
+      console.warn("Floor plan layer not initialized or map not ready.");
+      return;
+    }
+
+    if (this.showFloorPlan) {
+      this.floorPlanLayer.addTo(this.map);
+    } else {
+      this.map.removeLayer(this.floorPlanLayer);
+    }
+  }
+  onOpacityChange(newOpacity: number): void {
+    this.floorPlanOpacity = newOpacity; // Update component property
+    // Check if the layer is initialized and use its setOpacity method
+    if (this.floorPlanLayer && (this.floorPlanLayer as any).setOpacity) {
+      (this.floorPlanLayer as L.ImageOverlay).setOpacity(newOpacity);
+    }
+  }
+
   private emitConfigChange(payload: any): void {
     const finalConfig = {
       ...this.mapToConfig(this.imageBounds()),
@@ -353,11 +469,15 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     this.boundaryChange.emit(finalConfig);
   }
 
-  zoomLevelChanged(): void {
-    const zoomValue = Math.floor(this.currentZoomLevel);
-    if (this.map && zoomValue !== this.map.getZoom()) {
-      this.currentZoomLevel = zoomValue;
-      this.map.setZoom(zoomValue);
+  private setActualZoom(): void {
+    if (this.map) {
+      const actualZoom = this.map.getZoom();
+      const roundedActualZoom = Math.floor(actualZoom);
+
+      if (this.currentZoomLevel !== roundedActualZoom) {
+        this.currentZoomLevel = roundedActualZoom;
+        // No need for cdr.detectChanges here as the value is only used for saving (onSave).
+      }
     }
   }
 

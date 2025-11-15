@@ -26,7 +26,6 @@ import { AssetSelectorModule } from "@c8y/ngx-components/assets-navigator";
 import { TypeaheadModule } from "ngx-bootstrap/typeahead";
 import { FloorConfigModalComponent } from "./config/floor-configuration-modal/floor-config-modal.component";
 import { MapDataGridComponent } from "./shared/components/map-data-grid/map-data-grid.component";
-import { MapPreviewComponent } from "./config/map-preview/map-preview.component";
 
 @NgModule({
   declarations: [
@@ -38,7 +37,6 @@ import { MapPreviewComponent } from "./config/map-preview/map-preview.component"
     FloorConfigModalComponent,
     GPSComponent,
     ZonesComponent,
-    MapPreviewComponent,
   ],
   imports: [
     CoreModule,

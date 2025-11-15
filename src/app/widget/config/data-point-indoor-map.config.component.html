@@ -51,15 +51,6 @@
   <hr />
 
   <div *ngIf="selectedBuilding">
-    <div *ngIf="selectedBuilding.coordinates">
-      <c8y-gps-preview-component
-        [config]="selectedBuilding.coordinates"
-        [binaryId]="selectedBuilding.levels[0].binaryId"
-      ></c8y-gps-preview-component>
-    </div>
-
-    <hr />
-
     <div class="legend form-block">Building Configuration</div>
 
     <c8y-form-group>

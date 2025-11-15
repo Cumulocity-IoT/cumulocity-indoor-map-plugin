@@ -197,6 +197,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     const initialConfigWithRotation = {
       ...this.selectedBuilding.coordinates,
       rotationAngle: this.selectedBuilding.coordinates.rotationAngle || 0,
+      levels: this.selectedBuilding.levels,
     };
     const modalRef = this.modalService.show(GPSComponent, {
       initialState: { initialConfig: initialConfigWithRotation } as any,

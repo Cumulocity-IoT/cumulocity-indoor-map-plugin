@@ -391,6 +391,8 @@ export class DataPointIndoorMapComponent
 
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        // maxNativeZoom: 20,
+        maxZoom: this.building?.coordinates.zoomLevel,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -416,7 +418,7 @@ export class DataPointIndoorMapComponent
       map.setView(center, zoom);
       if (bounds) {
         map.fitBounds(bounds, {
-          maxZoom: zoom,
+          maxZoom: this.building?.coordinates.zoomLevel,
           animate: false,
         }); // Fit map to initial bounds
       }
@@ -608,7 +610,8 @@ export class DataPointIndoorMapComponent
     // 2. Re-add base tile layer
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: currentZoom,
+        //  maxNativeZoom: 20,
+        maxZoom: this.building?.coordinates.zoomLevel,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
