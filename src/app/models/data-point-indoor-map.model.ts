@@ -92,7 +92,6 @@ export interface MapConfigurationLevel {
 
   imageDetails: {
     dimensions?: { width: number; height: number };
-    corners: Array<{ lat: number; lng: number }>;
   };
 }
 

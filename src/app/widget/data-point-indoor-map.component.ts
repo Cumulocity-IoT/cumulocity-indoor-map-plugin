@@ -23,7 +23,7 @@ import type * as L from "leaflet";
 import { MeasurementRealtimeService } from "@c8y/ngx-components";
 import { fromEvent, Subscription, takeUntil } from "rxjs";
 import { EventPollingService } from "./polling/event-polling.service";
-import { get } from "lodash";
+import { get, isEmpty } from "lodash";
 import { BuildingService } from "../services/building.service";
 import { ImageRotateService } from "../services/image-rotate.service";
 
@@ -758,7 +758,8 @@ export class DataPointIndoorMapComponent
 
     let markerCreationCount = 0;
     allMarkerManagedObjects.forEach((markerManagedObject) => {
-      if (!markerManagedObject["c8y_Position"]) {
+      console.log("Processing markerManagedObject:", markerManagedObject);
+      if (!markerManagedObject["c8y_Position"] || isEmpty(markerManagedObject["c8y_Position"].lat) || isEmpty(markerManagedObject["c8y_Position"].lng)) {
         return;
       }
 
@@ -815,6 +816,8 @@ export class DataPointIndoorMapComponent
       markerStyle.color = "rgba(0,0,0,0.1)";
       markerStyle.weight = 1;
     }
+
+    console.log(position);
 
     if (!position) {
       // Fallback position

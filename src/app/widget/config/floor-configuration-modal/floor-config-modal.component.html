@@ -54,6 +54,7 @@
             <div class="m-t-8">
               <c8y-file-picker
                 [maxAllowedFiles]="1"
+                #filePicker
                 (onFilesPicked)="onFile($event)"
                 [uploadChoice]="'uploadBinary'"
                 aria-label="File picker for binary upload"
@@ -63,10 +64,10 @@
               <button
                 type="button"
                 class="btn btn-primary"
-                (click)="saveFloor()"
+                (click)="stageFloor()"
                 [disabled]="!newFloorName"
               >
-                Save
+                Add
               </button>
             </div>
           </div>
@@ -75,5 +76,8 @@
     </div>
   </div>
   <div class="modal-footer">
-  <button type="button" class="btn btn-default" (click)="cancel()">Save</button>
+  <div class="modal-footer">
+  <button type="button" class="btn btn-default" (click)="cancel()">Cancel</button>
+  <button type="button" class="btn btn-primary" (click)="saveConfiguration()">Save</button>
+</div>
 </div>
