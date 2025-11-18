@@ -1,7 +1,7 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy, // 1. OPTIMIZATION: Import ChangeDetectionStrategy
-  ChangeDetectorRef, // 1. OPTIMIZATION: Import ChangeDetectorRef
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ElementRef,
   EventEmitter,
@@ -38,7 +38,6 @@ import { ImageRotateService } from "../services/image-rotate.service";
     ImageRotateService,
   ],
   encapsulation: ViewEncapsulation.None,
-  // 1. OPTIMIZATION: Set ChangeDetectionStrategy to OnPush
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataPointIndoorMapComponent
@@ -151,14 +150,12 @@ export class DataPointIndoorMapComponent
     this.updateMapLevel(this.building!.levels![level]);
     this.initMarkers(this.map!, level);
 
-    // 1. OPTIMIZATION: Update data properties after map and markers are ready
     this.updateFilterProperties();
 
     this.isLoading = false;
     this.cd.detectChanges(); // Hide loading
   }
 
-  // 1. OPTIMIZATION: New method to update properties derived from markers
   private updateFilterProperties(): void {
     this.uniqueDeviceTypes = this.calculateUniqueDeviceTypes();
     this.filteredDevicesForGrid = this.filterMarkersBySearchString(
@@ -275,14 +272,12 @@ export class DataPointIndoorMapComponent
           { [datapoint]: measurement }
         );
 
-        // OPTIMIZATION: Since the marker style might change, update its color.
         // Update marker color (already in place)
         this.updateMarkerWithColor(
           deviceId,
           this.getBackgroundColor(managedObject[this.KEY_LATEST_MEASUREMENT])
         );
 
-        // 1. OPTIMIZATION: Manually mark the component for check to update UI components
         // that rely on the updated marker data (e.g., the data grid).
         this.cd.markForCheck();
       });
@@ -396,6 +391,7 @@ export class DataPointIndoorMapComponent
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: this.MAX_ZOOM,
+        maxNativeZoom: 19,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
@@ -608,6 +604,7 @@ export class DataPointIndoorMapComponent
     this.leaf
       .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: this.MAX_ZOOM,
+        maxNativeZoom: 19,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       })
