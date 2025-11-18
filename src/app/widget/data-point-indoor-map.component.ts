@@ -756,7 +756,10 @@ export class DataPointIndoorMapComponent
     let markerCreationCount = 0;
     allMarkerManagedObjects.forEach((markerManagedObject) => {
       console.log("Processing markerManagedObject:", markerManagedObject);
-      if (!markerManagedObject["c8y_Position"] || isEmpty(markerManagedObject["c8y_Position"].lat) || isEmpty(markerManagedObject["c8y_Position"].lng)) {
+      if (
+        !markerManagedObject["c8y_Position"] || 
+        markerManagedObject["c8y_Position"].lat == null || 
+        markerManagedObject["c8y_Position"].lng == null) {
         return;
       }
 
