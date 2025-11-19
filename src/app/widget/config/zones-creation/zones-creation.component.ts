@@ -48,6 +48,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     br: { lat: 0, lng: 0 },
   });
   public currentFloorLevel: number = 0;
+  private readonly MAX_ZOOM = 23;
 
   private allZonesByLevel: { [levelId: string]: string } = {};
   private hasInitialBoundsFit = false;
@@ -188,11 +189,12 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     // Map initialization
     this.map = L.map(this.mapReference.nativeElement, {
       center: bounds?.getCenter() || [52.52, 13.4],
-      zoom: 15,
+      zoom: this.initialConfig.coordinates?.zoomLevel || 18,
     });
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
+      maxZoom: this.MAX_ZOOM,
+      maxNativeZoom: 19,
       attribution:
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
@@ -405,7 +407,8 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Add base tiles
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
+      maxZoom: this.MAX_ZOOM,
+      maxNativeZoom: 19,
       attribution:
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);

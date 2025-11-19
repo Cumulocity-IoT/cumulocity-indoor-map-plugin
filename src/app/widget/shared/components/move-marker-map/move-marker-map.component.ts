@@ -53,7 +53,7 @@ export class MoveMarkerMapComponent
 
   @ViewChild("markerMap", { read: ElementRef, static: true })
   mapReference!: ElementRef;
-
+  private readonly MAX_ZOOM = 23;
   constructor() {}
 
   async ngOnInit() {
@@ -91,7 +91,8 @@ export class MoveMarkerMapComponent
     l.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
+      maxZoom: this.MAX_ZOOM,
+      maxNativeZoom: 19,
     }).addTo(map);
 
     await this.updateImageOverlay();
