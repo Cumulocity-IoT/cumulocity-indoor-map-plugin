@@ -27,6 +27,11 @@ export interface WidgetConfiguration {
   datapointsPopup?: DatapointPopup[];
   buildingId: string;
   buildingName: string;
+  markerStyle?: {
+    useIcons?: boolean;
+    defaultIcon?: string;
+    iconSize?: [number, number];
+  };
 }
 
 export type Threshold = {
@@ -100,6 +105,16 @@ export interface MarkerManagedObject extends IManagedObject {
     lat: number;
     lng: number;
   };
+  c8y_marker?: DeviceMarker;
+}
+
+export interface DeviceMarker {
+  color?: string;
+  size?: string;
+  icon?: string;
+  icon_color?: string;
+  icon_size?: number;
+  popup?: string;
 }
 
 export interface ZoneGeometry {

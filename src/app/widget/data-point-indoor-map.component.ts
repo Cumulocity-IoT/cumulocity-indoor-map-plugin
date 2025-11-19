@@ -51,10 +51,26 @@ export class DataPointIndoorMapComponent
 
   private readonly MARKER_DEFAULT_COLOR = "#1776BF";
   private readonly MARKER_HIGHLIGHT_COLOR = "#FFC300"; // Distinct color for highlighting
-  private readonly KEY_LATEST_MEASUREMENT = "latestPrimaryMeasurement";
-  private readonly KEY_MEASUREMENTS = "measurements";
   private readonly KEY_MAP_MARKER_INSTANCE = "mapMarkerInstance";
   private readonly MAX_ZOOM = 23;
+
+  // Icon configuration
+  private readonly DEFAULT_ICON = "location";
+  private readonly ICON_SIZE = [36, 26] as [number, number];
+  private readonly ICON_ANCHOR = [18, 26] as [number, number];
+
+  // Configurable properties
+  private get useIcons(): boolean {
+    return this.config?.markerStyle?.useIcons !== false; // Default to true
+  }
+
+  private get configuredIconSize(): [number, number] {
+    return this.config?.markerStyle?.iconSize || this.ICON_SIZE;
+  }
+
+  private get configuredDefaultIcon(): string {
+    return this.config?.markerStyle?.defaultIcon || this.DEFAULT_ICON;
+  }
 
   currentFloorLevel = 0;
   currentLevel?: MapConfigurationLevel;
@@ -106,7 +122,6 @@ export class DataPointIndoorMapComponent
       await this.loadManagedObjectsForMarkers(this.building);
       const level = this.currentFloorLevel;
       await this.loadLatestPrimaryMeasurementForMarkers(level);
-      this.initMeasurementUpdates(level);
 
       this.map = this.initMap(this.building, level);
 
@@ -144,7 +159,6 @@ export class DataPointIndoorMapComponent
 
     await this.loadLatestPrimaryMeasurementForMarkers(level);
     this.unsubscribeListeners();
-    this.initMeasurementUpdates(level);
 
     // Update map view and markers
     this.updateMapLevel(this.building!.levels![level]);
@@ -228,14 +242,6 @@ export class DataPointIndoorMapComponent
     // Missing logic to actually load measurements. Assuming it's elsewhere or omitted for brevity.
   }
 
-  private initMeasurementUpdates(level: number): void {
-    if (!this.isMarkersAvailableForCurrentFloorLevel(level)) {
-      return;
-    }
-
-    this.listenToConfiguredMeasurementUpdates(level);
-  }
-
   private updateMarkerWithColor(deviceId: string, fillColor: string) {
     let markerManagedObject: MarkerManagedObject | undefined;
     const markerMOS =
@@ -251,36 +257,6 @@ export class DataPointIndoorMapComponent
       return;
     }
     (mapMarkerInstance as L.CircleMarker).setStyle({ fillColor });
-  }
-
-  private listenToConfiguredMeasurementUpdates(level: number) {
-    this.measurementReceivedSub = this.buildingService.measurementReceived$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(({ deviceId, measurement }) => {
-        const datapoint = `${measurement.datapoint.fragment}.${measurement.datapoint.series}`;
-        const managedObject =
-          this.markerManagedObjectsForFloorLevel[level][deviceId];
-
-        if (!managedObject) {
-          return;
-        }
-
-        managedObject[this.KEY_MEASUREMENTS] = Object.assign(
-          !!managedObject[this.KEY_MEASUREMENTS]
-            ? managedObject[this.KEY_MEASUREMENTS]
-            : {},
-          { [datapoint]: measurement }
-        );
-
-        // Update marker color (already in place)
-        this.updateMarkerWithColor(
-          deviceId,
-          this.getBackgroundColor(managedObject[this.KEY_LATEST_MEASUREMENT])
-        );
-
-        // that rely on the updated marker data (e.g., the data grid).
-        this.cd.markForCheck();
-      });
   }
 
   private unsubscribeListeners() {
@@ -757,30 +733,196 @@ export class DataPointIndoorMapComponent
     allMarkerManagedObjects.forEach((markerManagedObject) => {
       console.log("Processing markerManagedObject:", markerManagedObject);
       if (
-        !markerManagedObject["c8y_Position"] || 
-        markerManagedObject["c8y_Position"].lat == null || 
-        markerManagedObject["c8y_Position"].lng == null) {
+        !markerManagedObject["c8y_Position"] ||
+        markerManagedObject["c8y_Position"].lat == null ||
+        markerManagedObject["c8y_Position"].lng == null
+      ) {
         return;
       }
 
       const isFiltered = filteredIds.has(markerManagedObject.id);
 
-      const circleMarkerInstance = this.createCircleMarkerInstance(
-        markerManagedObject,
-        isFiltered
-      ).addTo(
-        this.markersLayer! // Use the class property FeatureGroup
-      );
+      const markerInstance = this.useIcons
+        ? this.createMarkerInstance(markerManagedObject, isFiltered)
+        : this.createCircleMarkerInstance(markerManagedObject, isFiltered);
+
+      markerInstance.addTo(this.markersLayer!);
 
       markerCreationCount++;
 
-      markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] = circleMarkerInstance;
+      markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] = markerInstance;
     });
   }
 
   /**
-   * creates a circle marker instance with background color depending on the
-   * current primary measurement and the defined thresholds.
+   * creates a marker instance with a custom icon and color styling based on
+   * current primary measurement and defined thresholds.
+   */
+  private createMarkerInstance(
+    managedObject: MarkerManagedObject,
+    isFiltered: boolean
+  ): L.Marker {
+    const position = get(managedObject, "c8y_Position") as
+      | { lat: number; lng: number }
+      | undefined;
+
+    // Get marker configuration from c8y_marker fragment
+    const markerConfig = managedObject.c8y_marker;
+
+    const isFilterActive =
+      this.searchString.trim().length > 0 || this.selectedType.length > 0;
+
+    let opacity = 0.75;
+    let borderWidth = 0;
+
+    if (isFiltered && isFilterActive) {
+      // Apply highlight style
+      borderWidth = 3;
+      opacity = 0.9;
+    } else if (isFilterActive && !isFiltered) {
+      // If searching/filtering but this item isn't filtered, make it faded/less visible
+      opacity = 0.15;
+      borderWidth = 1;
+    }
+
+    const customIcon = this.createCustomIcon(
+      managedObject,
+      this.MARKER_DEFAULT_COLOR,
+      opacity,
+      this.MARKER_DEFAULT_COLOR,
+      borderWidth
+    );
+
+    if (!position) {
+      // Fallback position
+      return this.leaf.marker([0, 0], { icon: customIcon });
+    }
+
+    const marker = this.leaf.marker([position.lat, position.lng], {
+      icon: customIcon,
+    });
+
+    // Add tooltip with device information
+    const tooltipContent = this.createTooltipContent(managedObject);
+    marker.bindTooltip(tooltipContent, {
+      permanent: false,
+      direction: "top",
+      offset: [0, -10],
+    });
+
+    return marker;
+  }
+
+  /**
+   * Creates a custom DivIcon with the specified styling and icon
+   */
+  private createCustomIcon(
+    managedObject: MarkerManagedObject,
+    color: string,
+    opacity: number,
+    borderColor: string,
+    borderWidth: number
+  ): L.DivIcon {
+    // Get marker configuration from c8y_marker fragment
+    const markerConfig = managedObject.c8y_marker
+
+    // Use icon from c8y_marker or fallback to device type detection or default
+    const iconName =
+      markerConfig?.icon ||
+      this.getIconForDeviceType(managedObject["type"]) ||
+      this.configuredDefaultIcon;
+
+    // Use icon_color from c8y_marker if available, otherwise use the calculated color
+    const iconColor = markerConfig?.icon_color || color;
+    const iconSize = markerConfig?.icon_size || this.configuredIconSize;
+
+    const markerSize = markerConfig?.size || 36;
+    const markerColor = markerConfig?.color || "#000000";
+
+    // Create the icon HTML with Cumulocity icon classes
+    const iconHtml = `
+      <div class="custom-map-marker" style="
+        width: ${markerSize}px;
+        height: ${markerSize}px;
+        background-color: ${markerColor};
+        opacity: ${opacity};
+        border: ${borderWidth}px solid ${borderColor};
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      ">
+      <i class="d-block c8y-icon dlt-c8y-icon-${iconName}" style="
+          color: ${iconColor};
+          font-size: ${iconSize}px;
+        "></i>
+      </div>
+    `;
+
+    return this.leaf.divIcon({
+      html: iconHtml,
+      className: "custom-map-marker-container",
+      iconSize: this.ICON_SIZE,
+      iconAnchor: this.ICON_ANCHOR,
+    });
+  }
+
+  /**
+   * Returns appropriate icon name based on device type
+   */
+  private getIconForDeviceType(deviceType?: string): string | null {
+    if (!deviceType) {
+      return null;
+    }
+
+    const typeIconMap: { [key: string]: string } = {
+      c8y_TemperatureSensor: "thermometer",
+      c8y_HumiditySensor: "droplet",
+      c8y_LightSensor: "lightbulb-o",
+      c8y_MotionSensor: "eye",
+      c8y_Accelerometer: "dashboard",
+      c8y_Gyroscope: "compass",
+      c8y_Gateway: "router",
+      c8y_Device: "device",
+      c8y_Sensor: "sensors",
+      // Add more mappings as needed
+    };
+
+    // Try exact match first
+    if (typeIconMap[deviceType]) {
+      return typeIconMap[deviceType];
+    }
+
+    // Try partial matches
+    const lowerType = deviceType.toLowerCase();
+    if (lowerType.includes("temperature") || lowerType.includes("temp")) {
+      return "thermometer";
+    }
+    if (lowerType.includes("humidity")) {
+      return "droplet";
+    }
+    if (lowerType.includes("light")) {
+      return "lightbulb-o";
+    }
+    if (lowerType.includes("motion") || lowerType.includes("pir")) {
+      return "eye";
+    }
+    if (lowerType.includes("gateway") || lowerType.includes("router")) {
+      return "router";
+    }
+    if (lowerType.includes("sensor")) {
+      return "sensors";
+    }
+
+    return null; // Will use default icon
+  }
+
+  /**
+   * Creates tooltip content for a marker
+   */
+  /**
+   * creates a circle marker instance (original implementation for backward compatibility)
    */
   private createCircleMarkerInstance(
     managedObject: MarkerManagedObject,
@@ -790,10 +932,17 @@ export class DataPointIndoorMapComponent
       | { lat: number; lng: number }
       | undefined;
 
-    const baseColor = this.getBackgroundColor(
-      managedObject[this.KEY_LATEST_MEASUREMENT]
-    );
+    // Get marker configuration from c8y_marker fragment
+    const markerConfig = managedObject["c8y_marker"] as
+      | {
+          icon?: string;
+          icon_color?: string;
+          popup?: string;
+        }
+      | undefined;
 
+    // Use icon_color from c8y_marker if available, otherwise use measurement-based color
+    const baseColor = markerConfig?.icon_color || this.MARKER_DEFAULT_COLOR;
     const markerStyle: L.CircleMarkerOptions = {
       fillColor: baseColor,
       fillOpacity: 0.75,
@@ -817,22 +966,45 @@ export class DataPointIndoorMapComponent
       markerStyle.weight = 1;
     }
 
-    console.log(position);
-
     if (!position) {
       // Fallback position
       return this.leaf.circleMarker([0, 0], markerStyle);
     }
 
-    return this.leaf.circleMarker([position.lat, position.lng], markerStyle);
+    const circleMarker = this.leaf.circleMarker(
+      [position.lat, position.lng],
+      markerStyle
+    );
+
+    // Add tooltip for circle markers too
+    const tooltipContent = this.createTooltipContent(managedObject);
+    circleMarker.bindTooltip(tooltipContent, {
+      permanent: false,
+      direction: "top",
+      offset: [0, -10],
+    });
+
+    return circleMarker;
   }
 
-  private getBackgroundColor(measurement: Measurement | undefined): string {
-    if (!measurement) {
-      return this.MARKER_DEFAULT_COLOR;
+  private createTooltipContent(managedObject: MarkerManagedObject): string {
+    // Get marker configuration from c8y_marker fragment
+    const markerConfig =  managedObject.c8y_marker
+      
+    // If custom popup content is defined in c8y_marker, use it
+    if (markerConfig?.popup) {
+      return markerConfig.popup;
     }
-
-    return this.MARKER_DEFAULT_COLOR;
+    return (
+      "Name: " +
+      managedObject["name"] +
+      "<br/>" +
+      "ID: " +
+      managedObject.id +
+      "<br/>" +
+      "Type: " +
+      managedObject["type"]
+    );
   }
 
   private isMarkersAvailableForCurrentFloorLevel(level: number): boolean {
