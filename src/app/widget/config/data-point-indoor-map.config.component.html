@@ -54,23 +54,6 @@
     <div class="legend form-block">Building Configuration</div>
 
     <c8y-form-group>
-      <label>Building Boundaries</label>
-      <p class="small">
-        Draw a rectangle on the map to define the image bounds.
-      </p>
-      <button
-        type="button"
-        class="btn btn-default btn-block"
-        (click)="openMapBoundaryModal()"
-      >
-        <i c8yIcon="devices" class="c8y-icon"></i> Draw Map Boundaries
-        <span *ngIf="hasBuildingBoundaries()" class="text-success pull-right">
-          <i c8yIcon="check-circle"></i>
-        </span>
-      </button>
-    </c8y-form-group>
-
-    <c8y-form-group>
       <label>Floor Configuration</label>
       <p class="small">
         Draw a rectangle on the map to define the image bounds.
@@ -82,6 +65,23 @@
       >
         <i c8yIcon="devices" class="c8y-icon"></i> Configure Floors
         <span *ngIf="hasFloorConfiguration()" class="text-success pull-right">
+          <i c8yIcon="check-circle"></i>
+        </span>
+      </button>
+    </c8y-form-group>
+
+    <c8y-form-group>
+      <label>Building Boundaries</label>
+      <p class="small">
+        Draw a rectangle on the map to define the image bounds.
+      </p>
+      <button
+        type="button"
+        class="btn btn-default btn-block"
+        (click)="openMapBoundaryModal()"
+      >
+        <i c8yIcon="devices" class="c8y-icon"></i> Draw Map Boundaries
+        <span *ngIf="hasBuildingBoundaries()" class="text-success pull-right">
           <i c8yIcon="check-circle"></i>
         </span>
       </button>
