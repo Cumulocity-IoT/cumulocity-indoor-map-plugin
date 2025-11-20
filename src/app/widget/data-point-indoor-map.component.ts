@@ -530,10 +530,24 @@ export class DataPointIndoorMapComponent
           const clickedLayer = e.target;
           const mapInstance = map;
 
-          // --- ISOLATION MECHANISM ---
-          if (clickedLayer.getBounds && clickedLayer.getBounds().isValid()) {
-            const bounds = clickedLayer.getBounds();
+          // Check if the clicked layer is already the isolated one
+          if (this.isZoneIsolated && this.isolatedLayer === clickedLayer) {
+            // If the isolated layer is clicked again, restore the full view.
+            this.restoreZoneView();
+          } else if (
+            clickedLayer.getBounds &&
+            clickedLayer.getBounds().isValid()
+          ) {
+            // --- ISOLATION MECHANISM (if not already isolated) ---
+
+            // 1. If another zone is isolated, restore full view first
+            if (this.isZoneIsolated) {
+              this.restoreZoneView(); // Re-render all layers
+            }
+
+            // 2. Clear all layers to isolate the new clicked one
             this.zonesFeatureGroup!.clearLayers();
+            const bounds = clickedLayer.getBounds();
             this.isolatedLayer = clickedLayer;
             this.isZoneIsolated = true;
             clickedLayer.addTo(mapInstance);
@@ -823,7 +837,7 @@ export class DataPointIndoorMapComponent
     borderWidth: number
   ): L.DivIcon {
     // Get marker configuration from c8y_marker fragment
-    const markerConfig = managedObject.c8y_marker
+    const markerConfig = managedObject.c8y_marker;
 
     // Use icon from c8y_marker or fallback to device type detection or default
     const iconName =
@@ -988,8 +1002,8 @@ export class DataPointIndoorMapComponent
 
   private createTooltipContent(managedObject: MarkerManagedObject): string {
     // Get marker configuration from c8y_marker fragment
-    const markerConfig =  managedObject.c8y_marker
-      
+    const markerConfig = managedObject.c8y_marker;
+
     // If custom popup content is defined in c8y_marker, use it
     if (markerConfig?.popup) {
       return markerConfig.popup;
