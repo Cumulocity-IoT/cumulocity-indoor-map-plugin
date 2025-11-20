@@ -39,37 +39,37 @@ export class MapDataGridComponent implements OnInit {
       name: "id",
       header: "ID",
       path: "id",
-      filterable: true,
+      filterable: false,
     },
     {
       name: "name",
       header: "Name",
       path: "name",
-      filterable: true,
+      filterable: false,
     },
     {
       name: "type",
       header: "Type",
       path: "type",
-      filterable: true,
+      filterable: false,
     },
     {
       name: "creationTime",
       header: "Creation time",
       path: "creationTime",
-      filterable: true,
+      filterable: false,
     },
     {
       name: "lastUpdated",
       header: "Last updated",
       path: "lastUpdated",
-      filterable: true,
+      filterable: false,
     },
     {
       name: "owner",
       header: "Owner",
       path: "owner",
-      filterable: true,
+      filterable: false,
     },
   ];
   /** Initial pagination settings. */
@@ -85,70 +85,19 @@ export class MapDataGridComponent implements OnInit {
     striped: true,
     bordered: false,
     gridHeader: false,
-    filter: true,
+    filter: false,
     hover: true,
   };
-  /**
-   * Defines actions for individual rows.
-   * `type` can be one of the predefined ones, or a custom one.
-   * `callback` executes the action (based on the selected item object).
-   */
+
   actionControls: ActionControl[] = [
-    {
-      type: BuiltInActionType.Edit,
-      callback: (selectedItem) => this.onItemEdit(selectedItem),
-    },
-    {
-      type: BuiltInActionType.Delete,
-      callback: (selectedItem) => this.onItemDelete(selectedItem),
-    },
   ];
-  /**
-   * Defines actions for multiple rows.
-   * `type` can be one of the predefined ones, or a custom one.
-   * `callback` executes the action (based on the ids of selected items).
-   */
+
   bulkActionControls: BulkActionControl[] = [
-    {
-      type: BuiltInActionType.Export,
-      callback: (selectedItemIds) => this.onItemsExport(selectedItemIds),
-    },
-    {
-      type: BuiltInActionType.Delete,
-      callback: (selectedItemIds) => this.onItemsDelete(selectedItemIds),
-    },
+
   ];
   ngOnInit() {}
 
-  /** Executes an edit action on the selected item. */
-  onItemEdit(selectedItem: Row) {
-    console.log("item to edit:");
-    console.dir(selectedItem);
-  }
 
-  /** Executes a delete action on the selected item. */
-  onItemDelete(selectedItem: Row) {
-    console.log("item to delete:");
-    console.dir(selectedItem);
-  }
-
-  /** Executes an action on selected items, whenever the selection changes. */
-  onItemsSelect(selectedItemIds: string[]) {
-    console.log("selected items:");
-    console.dir(selectedItemIds);
-  }
-
-  /** Executes an export action of the selected multiple items. */
-  onItemsExport(selectedItemIds: string[]) {
-    console.log("items to export:");
-    console.dir(selectedItemIds);
-  }
-
-  /** Executes a delete action on the selected multiple items. */
-  onItemsDelete(selectedItemIds: string[]) {
-    console.log("items to delete:");
-    console.dir(selectedItemIds);
-  }
 
   /** Executes logic when data grid config changes. */
   onConfigChange(config: GridConfig) {

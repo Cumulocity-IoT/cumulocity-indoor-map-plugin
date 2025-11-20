@@ -40,6 +40,9 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
   };
   selectedItemIsSensor = false;
   @Input() building!: MapConfiguration;
+  @Input() managedObjectsForFloorLevels: MarkerManagedObject[][] = [];
+
+  managedObjectsForSelectedLevel: MarkerManagedObject[] = [];
 
   isLoadingImage = false;
   destroy$ = new Subject<void>();
@@ -98,6 +101,7 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
     if (level.binaryId) {
       this.selectedItem = undefined;
       delete this.safeDataUrl;
+      this.managedObjectsForSelectedLevel = this.managedObjectsForFloorLevels[this.building.levels.indexOf(level)];
       if (this.imageCache.has(level.binaryId)) {
         const imageUrl = this.imageCache.get(level.binaryId)!;
         this.safeDataUrl = this.sanitizer.bypassSecurityTrustUrl(imageUrl);

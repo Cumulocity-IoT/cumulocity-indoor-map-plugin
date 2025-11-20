@@ -24,7 +24,7 @@
       </div>
 
       <c8y-list-group class="separator-top">
-        <ng-container *ngFor="let mo of selectedLevel?.markers">
+        <ng-container *ngFor="let mo of managedObjectsForSelectedLevel">
           <c8y-li
             [class]="{ highlighted: selectedItem === mo }"
             (click)="selectItem(mo); selectedItemIsSensor = true"

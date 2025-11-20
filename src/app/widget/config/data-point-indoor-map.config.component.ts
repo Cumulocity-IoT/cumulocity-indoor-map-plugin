@@ -21,6 +21,7 @@ import {
   MapConfigurationLevel,
   WidgetConfiguration,
 } from "../../models/data-point-indoor-map.model";
+import { IManagedObject } from "@c8y/client";
 
 @Component({
   selector: "data-point-indoor-map-configuration",
@@ -42,6 +43,8 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   selectedBuilding?: MapConfiguration;
   selectedMapConfigurationId?: string; /** 🔹 For typeahead binding */
 
+
+  managedObjectsForFloorLevels : IManagedObject[][] | undefined;
   mapConfigInput = "";
   showCreateOption = false;
 
@@ -55,6 +58,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     bottomRightLat: 52.51,
     bottomRightLng: 13.41,
   };
+  markerManagedObjectsForFloorLevel: any;
 
   constructor(
     private buildingService: BuildingService,
@@ -184,14 +188,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     };
   }
 
-  onAssignDevicesButtonClicked(): void {
-    if (!this.selectedBuilding) return;
-    console.log(
-      "Opening modal to assign devices to building:",
-      this.selectedBuilding.name
-    );
-  }
-
   openMapBoundaryModal(): void {
     if (!this.selectedBuilding) return;
     const initialConfigWithRotation = {
@@ -227,7 +223,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   onEditDeviceLocation(): void {
     if (!this.selectedBuilding) return;
     this.modalService.show(AssignLocationModalComponent, {
-      initialState: { building: this.selectedBuilding },
+      initialState: { building: this.selectedBuilding, managedObjectsForFloorLevels: this.managedObjectsForFloorLevels } as any,
       class: "modal-lg",
     });
   }
@@ -280,6 +276,10 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
               await this.buildingService.loadMapConfigurationWithImages(
                 this.selectedBuilding.id
               );
+
+            this.managedObjectsForFloorLevels  =
+              await this.buildingService.loadMarkersForLevels(fullConfig.levels);
+           
             this.selectedBuilding = fullConfig;
             console.log("Loaded full building configuration:", fullConfig); // this.onMapConfigurationChanged();
           } catch {

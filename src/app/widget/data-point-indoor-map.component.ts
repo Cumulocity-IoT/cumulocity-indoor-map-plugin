@@ -16,7 +16,6 @@ import {
   MapConfiguration,
   MapConfigurationLevel,
   MarkerManagedObject,
-  Measurement,
   WidgetConfiguration,
 } from "../models/data-point-indoor-map.model";
 import type * as L from "leaflet";
