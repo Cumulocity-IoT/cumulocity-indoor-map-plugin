@@ -641,6 +641,11 @@ export class DataPointIndoorMapComponent
 
   public toggleZoneVisibility(): void {
     if (!this.map) return;
+    console.log(this.isolatedLayer);
+    if (this.isolatedLayer) {
+      // If the isolated layer is clicked again, restore the full view.
+      this.restoreZoneView();
+    }
     this.renderZones(this.map);
     this.cd.markForCheck();
   }
