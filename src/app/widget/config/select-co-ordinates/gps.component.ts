@@ -70,6 +70,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
       // Only run if the map is initialized and we have non-default geometry
       if (this.map && (bounds.tl.lat !== 0 || vertices)) {
+        // Redraw boundary on signal change, crucial for initial load
         this.drawSavedBoundary(bounds);
         this.updateImageOverlayPosition(); // Reposition overlay when geometry changes
       }
@@ -187,6 +188,12 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     this.map.on("zoomend", () => {
       this.setActualZoom();
     });
+    
+    // Draw existing boundary if any, right after initGeomanControl
+    const initialBounds = this.imageBounds();
+    if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
+      this.drawSavedBoundary(initialBounds);
+    }
   }
 
   private initGeomanControl(): void {
@@ -208,8 +215,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       drawRectangle: true,
       drawPolygon: false,
       drawText: false,
-      editMode: true,
-      dragMode: false,
+      editMode: true, // Set to true to make the Edit button available
+      dragMode: true,
       cutPolygon: false,
       deleteMode: true,
       rotateMode: true,
@@ -227,27 +234,14 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.featureGroup?.clearLayers();
       this.featureGroup?.addLayer(layer);
 
-      // Enable interaction immediately
+      // Enable interaction and attach listeners immediately
       this.enableLayerInteraction(layer);
 
       // Initial update
       this.handleLayerUpdate(layer);
     });
 
-    // --- 2. Unified Update Handler (Listens on MAP, not FeatureGroup) ---
-    // We listen to pm:edit (vertex change), pm:dragend (move), pm:rotateend (rotate), and pm:cut
-    const updateEvents = "pm:edit pm:dragend pm:rotateend";
-
-    mapWithPm.on(updateEvents, (e: any) => {
-      this.handleLayerUpdate(e.layer);
-
-      // Specific handling for rotation angle
-      if (e.type === "pm:rotateend") {
-        this.rotationAngle = e.angle || 0;
-      }
-    });
-
-    // --- 3. pm:remove Handler ---
+    // --- 2. pm:remove Handler ---
     mapWithPm.on("pm:remove", (e: any) => {
       this.imageBounds.set({ tl: { lat: 0, lng: 0 }, br: { lat: 0, lng: 0 } });
       this.polygonVertices.set(null);
@@ -255,19 +249,19 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.updateImageOverlayPosition();
       this.emitConfigChange(this.imageBounds());
     });
-
-    // Draw existing boundary if any
-    const initialBounds = this.imageBounds();
-    if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
-      this.drawSavedBoundary(initialBounds);
-    }
+    
+    // NOTE: Removed map-level listeners for pm:edit, pm:dragend, pm:rotateend 
+    // since they are now handled directly on the layer in enableLayerInteraction 
+    // for reliability.
   }
 
   // Helper to centralize update logic
   private handleLayerUpdate(layer: any) {
     if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
+      // Get the current AABB of the drawn shape (required for imageBounds state)
       this.updateImageBoundsFromLeaflet(layer.getBounds());
-      // Always capture vertices (Geoman treats skewed Rects as Polygons)
+      
+      // Always capture the actual vertices (polygon vertices for rotated/skewed shapes)
       this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
     } else {
       this.polygonVertices.set(null);
@@ -280,9 +274,28 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   // Helper to enable PM on a layer
   private enableLayerInteraction(layer: any) {
     if (layer.pm) {
-      // Check if you want it strictly editable or just capable of it
+      // 1. Enable Geoman modes
       layer.pm.enable({
         allowSelfIntersection: false,
+      });
+      // Ensure drag is also explicitly enabled
+      (layer as any).pm.enableLayerDrag();
+
+      // **FIX:** Add listeners directly to the layer for reliable event capturing
+      layer.on("pm:dragend", () => {
+        console.log("Layer pm:dragend triggered.");
+        this.handleLayerUpdate(layer);
+      });
+
+      layer.on("pm:edit", () => {
+        console.log("Layer pm:edit triggered.");
+        this.handleLayerUpdate(layer);
+      });
+
+      layer.on("pm:rotateend", (e: any) => {
+        console.log("Layer pm:rotateend triggered.");
+        this.rotationAngle = e.angle || 0;
+        this.handleLayerUpdate(layer);
       });
     }
   }
@@ -299,18 +312,16 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   private getOverlayControlPoints(): ControlPoints {
     const vertices = this.polygonVertices();
     const bounds = this.imageBounds();
-    const isRotated = vertices && vertices.length > 0 && vertices[0].length > 4; // Assume >4 vertices means polygon/rotation
-
-    // 1. If Polygon Vertices are present, use the advanced selection logic
+    
+    // 1. Use Polygon Vertices (preferred for rotation/skew)
     if (vertices) {
       const ring = vertices[0];
 
-      // Use the actual LatLng objects directly from the ring
       if (ring.length >= 4) {
-        // This relies on Geoman storing points sequentially:
+        // Geoman points are stored sequentially: TL, TR, BR, BL
         const tl = ring[0];
         const tr = ring[1];
-        const bl = ring[3] || ring[2]; // Use index 3 if available, otherwise index 2 (for simple triangles/polygons)
+        const bl = ring[3]; 
 
         return { tl, tr, bl };
       }
@@ -352,6 +363,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private updateImageOverlayPosition(): void {
+    console.log("Updating image overlay position...");
     if (!this.floorPlanLayer) return;
 
     const cp = this.getOverlayControlPoints();
@@ -452,7 +464,15 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   }): void {
     if (!this.map || !this.featureGroup) return;
 
-    this.featureGroup.clearLayers();
+    // Only draw if the feature group is empty to prevent duplication on signal change
+    if (this.featureGroup.getLayers().length > 0) {
+        // If a layer already exists, ensure its listeners are correctly attached
+        const existingLayer = this.featureGroup.getLayers()[0];
+        if (existingLayer) {
+            this.enableLayerInteraction(existingLayer);
+        }
+        return;
+    }
 
     let layerToDraw: L.Layer | undefined;
     let leafletBounds: L.LatLngBounds | undefined;
@@ -465,7 +485,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         dashArray: "5, 5",
         fillOpacity: 0.1,
       });
-      // Use the actual bounds of the polygon
+      // Use the actual bounds of the polygon (for centering, etc.)
       leafletBounds = (layerToDraw as L.Polygon).getBounds();
     } else if (bounds.tl.lat !== 0) {
       // Use standard rectangle if only AABB is saved
@@ -477,6 +497,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         color: "#ff0000",
         weight: 1,
         dashArray: "5, 5",
+        fillOpacity: 0.1,
       });
     } else {
       return;
@@ -489,12 +510,17 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         (layerToDraw as any).setRotation(this.rotationAngle);
       }
 
-      this.enableLayerInteraction(layerToDraw);
+      // **FIX: Use setTimeout to ensure the layer is fully added and rendered**
+      // **before enabling Geoman interaction and attaching layer-specific listeners.**
+      setTimeout(() => {
+        this.enableLayerInteraction(layerToDraw);
+      }, 50);
     }
   }
 
   ngOnDestroy(): void {
     if (this.map) {
+      // Ensure Geoman controls are removed before map destruction
       (this.map as any).pm.removeControls();
       this.map.off();
       this.map.remove();
@@ -506,7 +532,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onSave(): void {
-    const bounds = this.imageBounds();
+    // Current boundary state is saved implicitly through the effect/handleLayerUpdate calls
+    // during drawing/editing. We just need to trigger the final emit.
     this.emitConfigChange({});
     this.bsModalRef.hide();
   }
