@@ -126,3 +126,23 @@
     /* Set the height of the map's wrapper to 70% of the scrollable container's height */
     padding: 10px;
 }
+
+// Custom map marker styles
+.custom-map-marker-container {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-map-marker {
+  transition: all 0.2s ease;
+  cursor: pointer;
+  
+  &:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4) !important;
+  }
+  
+  i.c8y-icon {
+    transition: color 0.2s ease;
+  }
+}
