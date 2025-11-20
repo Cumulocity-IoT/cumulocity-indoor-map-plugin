@@ -18,7 +18,6 @@ import "@geoman-io/leaflet-geoman-free";
 import { GPSCoordinates } from "../../../models/data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
 import { InventoryBinaryService } from "@c8y/client";
-import { ImageRotateService } from "../../../services/image-rotate.service";
 
 // Define the required control point structure for the rotated plugin
 interface ControlPoints {
@@ -32,7 +31,6 @@ interface ControlPoints {
   templateUrl: "./gps.component.html",
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrls: ["./gps.component.less"],
-  providers: [ImageRotateService],
   encapsulation: ViewEncapsulation.None,
 })
 export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -64,8 +62,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private bsModalRef: BsModalRef,
-    private binaryService: InventoryBinaryService,
-    private imageRotateService: ImageRotateService
+    private binaryService: InventoryBinaryService
   ) {
     effect(() => {
       const bounds = this.imageBounds();
@@ -149,13 +146,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async initMap(): Promise<void> {
-    try {
-      this.imageRotateService.initialize(L);
-    } catch (err) {
-      // Ignore if already initialized
-    }
-
-    // Basic map setup
     this.map = L.map(this.mapReference.nativeElement, {
       center: [52.52, 13.4],
       zoom: this.currentZoomLevel,
@@ -198,20 +188,17 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.setActualZoom();
     });
   }
+
   private initGeomanControl(): void {
     if (!this.map) return;
     const mapWithPm = this.map as any;
-    if (!mapWithPm.pm) {
-      console.error("Leaflet-Geoman failed to initialize on the map instance.");
-      return;
-    }
 
-    // Ensure featureGroup is initialized and added to the map before setting up controls
     if (!this.featureGroup) {
       this.featureGroup = new L.FeatureGroup();
       this.map.addLayer(this.featureGroup);
     }
 
+    // --- GEOMAN CONTROL SETUP ---
     mapWithPm.pm.addControls({
       position: "topleft",
       drawMarker: false,
@@ -221,88 +208,52 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       drawRectangle: true,
       drawPolygon: false,
       drawText: false,
-
       editMode: true,
-      dragMode: true,
+      dragMode: false,
       cutPolygon: false,
       deleteMode: true,
       rotateMode: true,
       allowSelfIntersection: false,
-
       edit: {
         featureGroup: this.featureGroup,
       },
     });
 
+    // --- 1. pm:create Handler (User draws a NEW shape) ---
     mapWithPm.on("pm:create", (e: any) => {
-      const type = e.shape;
       const layer = e.layer;
 
+      // Clear existing layers so we only have one boundary
       this.featureGroup?.clearLayers();
       this.featureGroup?.addLayer(layer);
 
-      // 1. Update AABB bounds regardless of shape type
-      if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
-        this.updateImageBoundsFromLeaflet(layer.getBounds());
-      }
+      // Enable interaction immediately
+      this.enableLayerInteraction(layer);
 
-      // 2. Update vertices based on shape
-      if (
-        type === "Polygon" ||
-        (type === "Rectangle" && layer.getLatLngs().length > 2)
-      ) {
-        this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
-      } else if (type === "Rectangle") {
-        this.polygonVertices.set(null); // Simple rectangle only saves AABB
-      }
+      // Initial update
+      this.handleLayerUpdate(layer);
+    });
 
+    // --- 2. Unified Update Handler (Listens on MAP, not FeatureGroup) ---
+    // We listen to pm:edit (vertex change), pm:dragend (move), pm:rotateend (rotate), and pm:cut
+    const updateEvents = "pm:edit pm:dragend pm:rotateend";
+
+    mapWithPm.on(updateEvents, (e: any) => {
+      this.handleLayerUpdate(e.layer);
+
+      // Specific handling for rotation angle
+      if (e.type === "pm:rotateend") {
+        this.rotationAngle = e.angle || 0;
+      }
+    });
+
+    // --- 3. pm:remove Handler ---
+    mapWithPm.on("pm:remove", (e: any) => {
+      this.imageBounds.set({ tl: { lat: 0, lng: 0 }, br: { lat: 0, lng: 0 } });
+      this.polygonVertices.set(null);
+      this.rotationAngle = 0;
+      this.updateImageOverlayPosition();
       this.emitConfigChange(this.imageBounds());
-      layer.pm.enable({ allowSelfIntersection: false, rotate: true });
-    });
-
-    mapWithPm.on("pm:edit", (e: any) => {
-      e.layers.each((layer: any) => {
-        if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
-          this.updateImageBoundsFromLeaflet(layer.getBounds());
-        }
-        // Capture updated polygon vertices on edit
-        if (layer instanceof L.Polygon) {
-          this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
-        } else if (layer instanceof L.Rectangle) {
-          // If a rectangle is edited/skewed, Geoman may treat it like a polygon internally
-          // We capture the new geometry, which is crucial for the rotated overlay display component
-          this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
-        } else {
-          this.polygonVertices.set(null);
-        }
-        this.updateImageOverlayPosition(); // reposition overlay after edits
-        this.emitConfigChange(this.imageBounds());
-      });
-    });
-    mapWithPm.on("pm:rotateend", (e: any) => {
-      const layer = e.layer;
-      console.log(e.layer, "layer");
-      console.log(e.angle, "angle");
-
-      // FIX: Use the official e.angle property provided by Leaflet-Geoman
-      const angle = e.angle || 0;
-
-      // Ensure the angle is captured and updated only if it has changed
-      if (Math.abs(angle - this.rotationAngle) > 0.001) {
-        this.rotationAngle = angle; // Capture the new angle
-
-        // The rotation interaction ensures the LatLngs are updated.
-        if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
-          this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
-        }
-
-        // Update AABB bounds after rotation
-        if (layer.getBounds) {
-          this.updateImageBoundsFromLeaflet(layer.getBounds());
-        }
-        this.updateImageOverlayPosition();
-        this.emitConfigChange(this.imageBounds());
-      }
     });
 
     // Draw existing boundary if any
@@ -312,6 +263,29 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Helper to centralize update logic
+  private handleLayerUpdate(layer: any) {
+    if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
+      this.updateImageBoundsFromLeaflet(layer.getBounds());
+      // Always capture vertices (Geoman treats skewed Rects as Polygons)
+      this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
+    } else {
+      this.polygonVertices.set(null);
+    }
+
+    this.updateImageOverlayPosition();
+    this.emitConfigChange(this.imageBounds());
+  }
+
+  // Helper to enable PM on a layer
+  private enableLayerInteraction(layer: any) {
+    if (layer.pm) {
+      // Check if you want it strictly editable or just capable of it
+      layer.pm.enable({
+        allowSelfIntersection: false,
+      });
+    }
+  }
   private updateImageBoundsFromLeaflet(bounds: L.LatLngBounds): void {
     const tl = bounds.getNorthWest(); // Top-Left (North-West)
     const br = bounds.getSouthEast(); // Bottom-Right (South-East)
@@ -361,8 +335,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   private centerMapOnBounds(): void {
     const bounds = this.getImageBounds();
     if (this.map && bounds.isValid()) {
-      this.map.fitBounds(bounds, {
-        maxZoom: this.currentZoomLevel,
+      const center = bounds.getCenter();
+      this.map.setView(center, this.currentZoomLevel, {
         animate: false,
       });
     }
@@ -508,22 +482,14 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    if (layerToDraw && leafletBounds) {
+    if (layerToDraw) {
       this.featureGroup.addLayer(layerToDraw);
 
       if (this.rotationAngle !== 0 && (layerToDraw as any).setRotation) {
         (layerToDraw as any).setRotation(this.rotationAngle);
       }
 
-      (layerToDraw as any).pm.enable({
-        allowSelfIntersection: false,
-        rotate: true,
-      });
-
-      this.map.fitBounds(leafletBounds, {
-        maxZoom: this.currentZoomLevel,
-        animate: false,
-      });
+      this.enableLayerInteraction(layerToDraw);
     }
   }
 

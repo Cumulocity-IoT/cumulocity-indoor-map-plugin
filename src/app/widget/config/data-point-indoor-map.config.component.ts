@@ -314,8 +314,13 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     config?: WidgetConfiguration
   ): boolean | Promise<boolean> | Observable<boolean> {
     console.log(this.selectedBuilding);
-    if (isEmpty(this.selectedBuilding?.name)) {
-      alert("Please provide a name for the building.");
+    if (
+      isEmpty(this.selectedBuilding?.name) ||
+      this.selectedBuilding?.coordinates?.topLeftLat == 0
+    ) {
+      alert(
+        "Please provide a name for the building and select coordinates to save"
+      );
       return false;
     } // Optionally, persist the configuration using the service
 
