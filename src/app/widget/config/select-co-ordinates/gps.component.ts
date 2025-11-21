@@ -155,6 +155,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     // 1. Base Map Layer (e.g., OpenStreetMap)
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 23,
+      maxNativeZoom: 19,
       attribution:
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
@@ -188,7 +189,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     this.map.on("zoomend", () => {
       this.setActualZoom();
     });
-    
+
     // Draw existing boundary if any, right after initGeomanControl
     const initialBounds = this.imageBounds();
     if (initialBounds.tl.lat !== 0 || this.polygonVertices()) {
@@ -249,9 +250,9 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.updateImageOverlayPosition();
       this.emitConfigChange(this.imageBounds());
     });
-    
-    // NOTE: Removed map-level listeners for pm:edit, pm:dragend, pm:rotateend 
-    // since they are now handled directly on the layer in enableLayerInteraction 
+
+    // NOTE: Removed map-level listeners for pm:edit, pm:dragend, pm:rotateend
+    // since they are now handled directly on the layer in enableLayerInteraction
     // for reliability.
   }
 
@@ -260,7 +261,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
       // Get the current AABB of the drawn shape (required for imageBounds state)
       this.updateImageBoundsFromLeaflet(layer.getBounds());
-      
+
       // Always capture the actual vertices (polygon vertices for rotated/skewed shapes)
       this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
     } else {
@@ -312,7 +313,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   private getOverlayControlPoints(): ControlPoints {
     const vertices = this.polygonVertices();
     const bounds = this.imageBounds();
-    
+
     // 1. Use Polygon Vertices (preferred for rotation/skew)
     if (vertices) {
       const ring = vertices[0];
@@ -321,7 +322,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         // Geoman points are stored sequentially: TL, TR, BR, BL
         const tl = ring[0];
         const tr = ring[1];
-        const bl = ring[3]; 
+        const bl = ring[3];
 
         return { tl, tr, bl };
       }
@@ -466,12 +467,12 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Only draw if the feature group is empty to prevent duplication on signal change
     if (this.featureGroup.getLayers().length > 0) {
-        // If a layer already exists, ensure its listeners are correctly attached
-        const existingLayer = this.featureGroup.getLayers()[0];
-        if (existingLayer) {
-            this.enableLayerInteraction(existingLayer);
-        }
-        return;
+      // If a layer already exists, ensure its listeners are correctly attached
+      const existingLayer = this.featureGroup.getLayers()[0];
+      if (existingLayer) {
+        this.enableLayerInteraction(existingLayer);
+      }
+      return;
     }
 
     let layerToDraw: L.Layer | undefined;
