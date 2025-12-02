@@ -19,7 +19,7 @@
     </div>
   </div>
 
-  <div class="col-md-6">
+  <div class="col-md-4">
     <label class="c8y-label">Search Devices</label>
     <div class="input-group input-group-search" id="example">
       <input
@@ -88,14 +88,24 @@
       />
       <span></span>
       Show Zones
-
     </label>
+  </div>
+  <div class="col-md-2">
+    <interval-refresh
+      [isLoading$]="isLoading$"
+      [isIntervalToggleEnabled]="true"
+      (onCountdownEnded)="refresh()"
+    >
+    </interval-refresh>
   </div>
 </div>
 
 <div class="content-scroll-container">
   <div class="map-container" style="height: 70%; padding: 10px">
-    <c8y-loading class="loading-absolute" *ngIf="isLoading"></c8y-loading>
+    <c8y-loading
+      class="loading-absolute"
+      *ngIf="isLoading$ | async"
+    ></c8y-loading>
     <div class="map-frame" style="width: 100%; height: 100%">
       <div
         #IndoorDataPointMap
@@ -104,7 +114,5 @@
     </div>
   </div>
 
-  <map-data-grid
-    [devices]="filteredDevicesForGrid"
-  ></map-data-grid>
+  <map-data-grid [devices]="filteredDevicesForGrid"></map-data-grid>
 </div>

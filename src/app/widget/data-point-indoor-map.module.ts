@@ -26,6 +26,7 @@ import { AssetSelectorModule } from "@c8y/ngx-components/assets-navigator";
 import { TypeaheadModule } from "ngx-bootstrap/typeahead";
 import { FloorConfigModalComponent } from "./config/floor-configuration-modal/floor-config-modal.component";
 import { MapDataGridComponent } from "./shared/components/map-data-grid/map-data-grid.component";
+import { PSAutoRefreshComponent } from "./auto-refresh/ps-auto-refresh.component";
 
 @NgModule({
   declarations: [
@@ -51,7 +52,8 @@ import { MapDataGridComponent } from "./shared/components/map-data-grid/map-data
     MapDataGridComponent,
     AssetSelectorModule,
     TypeaheadModule.forRoot(),
-  ],
+    PSAutoRefreshComponent
+],
   providers: [
     hookWidget({
       id: "indoor-data-point-map-widget",

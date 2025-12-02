@@ -20,7 +20,7 @@ import {
 } from "../models/data-point-indoor-map.model";
 import type * as L from "leaflet";
 import { MeasurementRealtimeService } from "@c8y/ngx-components";
-import { fromEvent, Subscription, takeUntil } from "rxjs";
+import { BehaviorSubject, fromEvent, Subscription, takeUntil } from "rxjs";
 import { EventPollingService } from "./polling/event-polling.service";
 import { get, isEmpty } from "lodash";
 import { BuildingService } from "../services/building.service";
@@ -45,6 +45,8 @@ export class DataPointIndoorMapComponent
   @Input() config!: WidgetConfiguration;
   @ViewChild("IndoorDataPointMap", { read: ElementRef, static: true })
   mapReference!: ElementRef;
+
+  isLoading$: BehaviorSubject<boolean> = new BehaviorSubject(false);
 
   building?: MapConfiguration;
 
@@ -83,7 +85,6 @@ export class DataPointIndoorMapComponent
   measurementReceivedSub?: Subscription;
   primaryMeasurementReceivedSub?: Subscription;
   eventThresholdSub?: Subscription;
-  isLoading = false;
   searchString: string = "";
   selectedType: string = ""; // New property for the type filter
 
@@ -113,7 +114,8 @@ export class DataPointIndoorMapComponent
   }
 
   async ngAfterViewInit(): Promise<void> {
-    this.isLoading = true;
+    this.isLoading$.next(true);
+    console.log("ngAfterViewInit: Loading map data...");
     this.cd.detectChanges(); // Trigger change detection to show loading indicator
 
     if (this.config?.buildingId) {
@@ -128,10 +130,10 @@ export class DataPointIndoorMapComponent
       this.initMarkers(this.map, level);
       this.updateFilterProperties();
 
-      this.isLoading = false;
+      this.isLoading$.next(false);
       this.cd.detectChanges(); // Trigger change detection to hide loading indicator
     } else {
-      this.isLoading = false;
+      this.isLoading$.next(false);
       this.cd.detectChanges();
     }
   }
@@ -147,7 +149,6 @@ export class DataPointIndoorMapComponent
   }
 
   async onLevelChanged() {
-    this.isLoading = true;
     this.cd.detectChanges(); // Show loading
 
     const level = this.currentFloorLevel;
@@ -165,7 +166,6 @@ export class DataPointIndoorMapComponent
 
     this.updateFilterProperties();
 
-    this.isLoading = false;
     this.cd.detectChanges(); // Hide loading
   }
 
@@ -564,13 +564,14 @@ export class DataPointIndoorMapComponent
   }
 
   /**
-   * FIX: Stop changing zoom when level changes.
+   * FIX: Stop changing zoom when level changes (or map refreshes).
    */
   private updateMapLevel(level: MapConfigurationLevel) {
     const map = this.map!;
 
-    // FIX: Get the current zoom level before clearing the map
-    const currentZoom = this.building?.coordinates?.zoomLevel;
+    // Store the map's current center and zoom BEFORE clearing layers.
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
 
     // 1. Clear existing layers (except base tiles)
     if (this.zonesFeatureGroup) {
@@ -599,10 +600,11 @@ export class DataPointIndoorMapComponent
       })
       .addTo(map);
 
-    const bounds = this.calculateBounds();
     const controlPoints = this.getValidatedControlPoints();
 
     if (!controlPoints) {
+      // If no control points, we still restore the map view state
+      map.setView(currentCenter, currentZoom);
       return;
     }
     const { topleft, topright, bottomleft } = controlPoints;
@@ -623,10 +625,8 @@ export class DataPointIndoorMapComponent
       );
       imageOverlay.addTo(map);
 
-      const center = this.getCenterCoordinates(this.building?.coordinates);
-
-      // FIX: Set view using the center of the building and the saved current zoom
-      map.setView(center, currentZoom);
+      // FIX: Restore the map view using the captured current center and zoom
+      map.setView(currentCenter, currentZoom);
 
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
@@ -635,9 +635,65 @@ export class DataPointIndoorMapComponent
       fromEvent<L.LeafletEvent>(map, "dragend")
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onDragEnd());
+      
       this.renderZones(map);
     }
   }
+
+  /**
+   * Refetches all managed object related information (position, marker, popover)
+   * and updates them on the map without removing and re-initializing the entire Leaflet map.
+   */
+  public async refresh(): Promise<void> {
+    // Check if the map is initialized and a building is configured
+    if (!this.map || !this.config?.buildingId) {
+      console.warn("Map not initialized or buildingId missing, falling back to full init.");
+      // Fallback to the original logic if essential data is missing (e.g., first load)
+      this.isLoading$.next(true);
+      await this.ngAfterViewInit(); 
+      return;
+    }
+
+    this.isLoading$.next(true);
+    this.cd.detectChanges(); // Show loading indicator
+
+    try {
+      const currentLevel = this.currentFloorLevel;
+
+      // 1. Refetch the latest map configuration (to get new polygon/coordinates if updated)
+      this.building = await this.loadMapConfiguration(); 
+
+      // 2. Refetch the corresponding managed objects for all markers (e.g., position, fragments)
+      if (this.building) {
+        await this.loadManagedObjectsForMarkers(this.building);
+      }
+      
+      // 3. Load latest measurements and events (required for coloring/styling)
+      await this.loadLatestPrimaryMeasurementForMarkers(currentLevel); 
+      
+      // 4. Unsubscribe and re-subscribe to real-time updates (to ensure we use the latest devices)
+      this.unsubscribeListeners();
+
+      // 5. Update the map image (in case floor/image has changed) and zones
+      // This preserves the map's current zoom and center
+      if (this.building?.levels && this.building.levels[currentLevel]) {
+        this.updateMapLevel(this.building.levels[currentLevel]);
+      }
+
+      // 6. Re-initialize markers to update positions, icons, and filter state
+      this.initMarkers(this.map, currentLevel);
+
+      // 7. Re-calculate and update the filter data properties for the grid/dropdown
+      this.updateFilterProperties();
+
+    } catch (error) {
+      console.error("Error during non-disruptive map refresh:", error);
+    } finally {
+      this.isLoading$.next(false);
+      this.cd.detectChanges(); // Hide loading indicator and update UI
+    }
+  }
+
 
   public toggleZoneVisibility(): void {
     if (!this.map) return;
@@ -936,9 +992,6 @@ export class DataPointIndoorMapComponent
     return null; // Will use default icon
   }
 
-  /**
-   * Creates tooltip content for a marker
-   */
   /**
    * creates a circle marker instance (original implementation for backward compatibility)
    */
