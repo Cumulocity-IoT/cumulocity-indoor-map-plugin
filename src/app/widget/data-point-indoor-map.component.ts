@@ -641,13 +641,13 @@ export class DataPointIndoorMapComponent
   }
 
   /**
-   * Refetches all managed object related information (position, marker, popover)
-   * and updates them on the map without removing and re-initializing the entire Leaflet map.
+   * Refetches only device-related managed object information (position, marker, popover)
+   * and updates them on the map, skipping the expensive map/image configuration reload.
    */
   public async refresh(): Promise<void> {
-    // Check if the map is initialized and a building is configured
-    if (!this.map || !this.config?.buildingId) {
-      console.warn("Map not initialized or buildingId missing, falling back to full init.");
+    // Check if the map and building configuration are already initialized.
+    if (!this.map || !this.building || !this.config?.buildingId) {
+      console.warn("Map not fully initialized, falling back to full initialization.");
       // Fallback to the original logic if essential data is missing (e.g., first load)
       this.isLoading$.next(true);
       await this.ngAfterViewInit(); 
@@ -660,34 +660,28 @@ export class DataPointIndoorMapComponent
     try {
       const currentLevel = this.currentFloorLevel;
 
-      // 1. Refetch the latest map configuration (to get new polygon/coordinates if updated)
-      this.building = await this.loadMapConfiguration(); 
+      // 1. *** IMPORTANT FIX: SKIP loadMapConfiguration() ***
+      // We skip reloading the map configuration to ensure the floor plan image BLOB
+      // is not re-fetched or re-initialized.
 
-      // 2. Refetch the corresponding managed objects for all markers (e.g., position, fragments)
-      if (this.building) {
-        await this.loadManagedObjectsForMarkers(this.building);
-      }
+      // 2. Refetch the corresponding managed objects for all markers (position, fragments)
+      await this.loadManagedObjectsForMarkers(this.building);
       
       // 3. Load latest measurements and events (required for coloring/styling)
       await this.loadLatestPrimaryMeasurementForMarkers(currentLevel); 
       
-      // 4. Unsubscribe and re-subscribe to real-time updates (to ensure we use the latest devices)
+      // 4. Unsubscribe and re-subscribe to real-time updates
       this.unsubscribeListeners();
 
-      // 5. Update the map image (in case floor/image has changed) and zones
-      // This preserves the map's current zoom and center
-      if (this.building?.levels && this.building.levels[currentLevel]) {
-        this.updateMapLevel(this.building.levels[currentLevel]);
-      }
-
-      // 6. Re-initialize markers to update positions, icons, and filter state
+      // 5. Re-initialize markers to update positions, icons, and filter state
+      // This is the core update mechanism: it clears and redraws all device markers.
       this.initMarkers(this.map, currentLevel);
 
-      // 7. Re-calculate and update the filter data properties for the grid/dropdown
+      // 6. Re-calculate and update the filter data properties for the grid/dropdown
       this.updateFilterProperties();
 
     } catch (error) {
-      console.error("Error during non-disruptive map refresh:", error);
+      console.error("Error during lightweight map refresh:", error);
     } finally {
       this.isLoading$.next(false);
       this.cd.detectChanges(); // Hide loading indicator and update UI
@@ -1107,6 +1101,4 @@ export class DataPointIndoorMapComponent
     return uniqueTypes;
   }
 
-  // 1. OPTIMIZATION: Removed the public getter getManagedObjectsForCurrentFloorLevel()
-  // Data grid now uses the public property filteredDevicesForGrid
 }
