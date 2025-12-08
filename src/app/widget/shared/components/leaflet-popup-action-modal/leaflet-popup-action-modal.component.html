@@ -56,35 +56,79 @@
       </ng-container>
 
       <ng-container *ngIf="actionType === 'operation'">
-        <div class="col-xs-12">
-          <label>Operation Fragment </label>
-          <input
-            formControlName="c8y_Command"
-            type="text"
-            class="form-control"
-            placeholder="e.g., c8y_Relay.relayState"
-          />
-        </div>
-        <div class="col-xs-12 m-t-10">
-          <label>Value</label>
-          <input
-            formControlName="commandValue"
-            type="text"
-            class="form-control"
-            placeholder="e.g., 'ON', 'OFF', or '25'"
-          />
-        </div>
-        <div class="col-xs-12 m-t-10">
-          <c8y-checkbox
-            formControlName="delayExecution"
-            label="Schedule for later"
-            type="checkbox"
-          ></c8y-checkbox>
+        <div class="modal-inner-scroll" id="modal-body">
+          <c8y-ui-empty-state
+            [icon]="'terminal'"
+            [title]="'No predefined command available.' | translate"
+            *ngIf="commandTemplates.length === 0"
+          ></c8y-ui-empty-state>
+
+          <div class="list-group borderless-top command-templates-list">
+            <div
+              class="list-group-item d-flex"
+              [class.active]="selectedCommandTemplate === commandTemplate"
+              *ngFor="let commandTemplate of commandTemplates"
+              (click)="onTemplateSelected(commandTemplate)"
+            >
+              <div
+                class="list-item-actions"
+                *ngIf="commandTemplate.id"
+                (click)="$event.stopPropagation()"
+                data-cy="commandTemplates--list-item-dropdown"
+              ></div>
+              <div class="list-item-icon">
+                <i c8y-icon="terminal"></i>
+              </div>
+              <div class="list-item-body">
+                <div class="d-flex a-i-start">
+                  <div class="d-col flex-grow" style="max-width: 460px">
+                    <span class="p-r-8">
+                      {{ commandTemplate?.['name'] | translate }}
+                    </span>
+                    <span class="list-group-item-text">
+                      <small
+                        [class.text-muted]="
+                          selectedCommandTemplate !== commandTemplate
+                        "
+                      >
+                        {{ commandTemplate["command"] }}
+                      </small>
+                    </span>
+                  </div>
+                  <div class="d-col" style="max-width: 70px !important">
+                    <span
+                      class="tag tag--info m-b-4"
+                      title=" {{
+                        commandTemplate['deliveryTypes'][0] | translate
+                      }}"
+                      *ngIf="commandTemplate['deliveryTypes'].length === 1"
+                    >
+                      {{ commandTemplate["deliveryTypes"][0] | translate }}
+                    </span>
+                    <span
+                      class="tag tag--info"
+                      title=" {{ commandTemplate['category'] | translate }}"
+                      *ngIf="commandTemplate['category']"
+                    >
+                      {{ commandTemplate["category"] | translate }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <span class="label label-info m-16">
+            To create more predefined commands, click here:
+            <a [href]="'devicemanegement/device/' + device?.id + '/shell'">
+              Device Management
+            </a>
+          </span>
         </div>
       </ng-container>
 
       <div *ngIf="!actionType" class="col-xs-12 alert alert-warning">
-        No action type provided. Device ID: {{ deviceId }}
+        No action type provided. Device ID: {{ device?.id }}
       </div>
     </div>
   </form>
@@ -101,8 +145,18 @@
     type="button"
     class="btn btn-primary"
     [disabled]="!formGroup?.valid"
+    *ngIf="actionType !== 'operation'"
     (click)="onSaveButtonClicked()"
   >
     Save
+  </button>
+  <button
+    type="button"
+    class="btn btn-primary"
+    [disabled]="!selectedCommandTemplate"
+    (click)="onSaveButtonClicked()"
+    *ngIf="actionType === 'operation'"
+  >
+    Execute
   </button>
 </div>

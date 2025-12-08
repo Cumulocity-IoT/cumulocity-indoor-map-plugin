@@ -6,10 +6,13 @@ import {
   EventService,
   IAlarm,
   IEvent,
+  IManagedObject,
+  InventoryService,
   IOperation,
   OperationService,
 } from "@c8y/client";
 import { AlertService, CoreModule } from "@c8y/ngx-components";
+import { filter } from "lodash";
 import { BsModalRef } from "ngx-bootstrap/modal";
 
 @Component({
@@ -20,11 +23,14 @@ import { BsModalRef } from "ngx-bootstrap/modal";
   encapsulation: ViewEncapsulation.None,
 })
 export class LeafletPopupActionModalComponent implements OnInit {
-  @Input() deviceId?: string;
+  @Input() device?: IManagedObject;
   @Input() actionType?: "alarm" | "event" | "operation";
 
   formGroup?: FormGroup;
   title: string = "Device Action";
+
+  commandTemplates: IManagedObject[] = [];
+  selectedCommandTemplate?: IManagedObject;
 
   constructor(
     private modalRef: BsModalRef,
@@ -32,7 +38,8 @@ export class LeafletPopupActionModalComponent implements OnInit {
     private alarmService: AlarmService,
     private eventService: EventService,
     private operationService: OperationService,
-    private alertService: AlertService
+    private alertService: AlertService,
+    private inventoryService: InventoryService
   ) {}
 
   ngOnInit() {
@@ -42,13 +49,19 @@ export class LeafletPopupActionModalComponent implements OnInit {
 
   private setTitle(): void {
     if (this.actionType === "alarm") {
-      this.title = `Create Alarm for Device ID: ${this.deviceId}`;
+      this.title = `Create Alarm for Device : ${
+        this.device?.["name"] || this.device?.id
+      }`;
     } else if (this.actionType === "event") {
-      this.title = `Create Event for Device ID: ${this.deviceId}`;
+      this.title = `Create Event for Device : ${
+        this.device?.["name"] || this.device?.id
+      }`;
     } else if (this.actionType === "operation") {
-      this.title = `Send Operation for Device ID: ${this.deviceId}`;
+      this.title = `Send Operation for Device : ${
+        this.device?.["name"] || this.device?.id
+      }`;
     } else {
-      this.title = `Action for Device ID: ${this.deviceId}`;
+      this.title = `Action for Device ID: ${this.device?.id}`;
     }
   }
 
@@ -85,6 +98,15 @@ export class LeafletPopupActionModalComponent implements OnInit {
   }
 
   private sendOperationFormGroup(): FormGroup {
+    const filter = {
+      type: "c8y_DeviceShellTemplate",
+      deviceType: this.device?.["type"] || "",
+    };
+
+    this.inventoryService.list(filter).then((res) => {
+      this.commandTemplates = res.data;
+    });
+
     return this.formBuilder.group({
       c8y_Command: ["", Validators.required],
       commandValue: ["", Validators.required],
@@ -93,8 +115,8 @@ export class LeafletPopupActionModalComponent implements OnInit {
   }
 
   onSaveButtonClicked(): void {
-    if (this.formGroup?.valid && this.deviceId) {
-      const values = this.formGroup.value;
+    if (this.formGroup?.valid || this.device?.id) {
+      const values = this.formGroup?.value;
 
       if (this.actionType === "alarm") {
         const newAlarm = this.createAlarmPayload(values);
@@ -134,7 +156,7 @@ export class LeafletPopupActionModalComponent implements OnInit {
 
   private createAlarmPayload(values: any): Partial<IAlarm> {
     return {
-      source: { id: this.deviceId! },
+      source: { id: this.device?.id! },
       type: values.alarmType,
       text: values.text,
       severity: values.severity,
@@ -145,7 +167,7 @@ export class LeafletPopupActionModalComponent implements OnInit {
 
   private createEventPayload(values: any): Partial<IEvent> {
     return {
-      source: { id: this.deviceId! },
+      source: { id: this.device?.id! },
       type: values.eventType,
       text: values.eventText || "Manual event created from map popup.",
       time: new Date().toISOString(),
@@ -153,19 +175,18 @@ export class LeafletPopupActionModalComponent implements OnInit {
   }
 
   private createOperationPayload(values: any): Partial<IOperation> {
-    // The operation payload uses the form group keys directly to form the fragment
-    const operationFragment: any = {};
-    operationFragment[values.c8y_Command] = values.commandValue;
-
     return {
-      deviceId: this.deviceId!,
-      // Status is PENDING by default when created
-      // The delayExecution logic would require more advanced scheduling,
-      // but for basic API call, we just send it.
-      ...operationFragment,
+      deviceId: this.device?.id!,
+      text: "Operation created from map plugin",
+      c8y_Command: { text: this.selectedCommandTemplate?.["command"] },
     };
   }
+
   private hideDialog() {
     this.modalRef.hide();
+  }
+
+  onTemplateSelected(template: IManagedObject): void {
+    this.selectedCommandTemplate = template;
   }
 }

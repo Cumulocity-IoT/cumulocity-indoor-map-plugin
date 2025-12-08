@@ -905,7 +905,7 @@ export class DataPointIndoorMapComponent
             | null;
 
           if (deviceId && actionType) {
-            self.openActionModal(deviceId, actionType);
+            self.openActionModal(managedObject, actionType);
             e.target.closePopup();
           }
         };
@@ -1118,7 +1118,7 @@ export class DataPointIndoorMapComponent
             | null;
 
           if (deviceId && actionType) {
-            self.openActionModal(deviceId, actionType);
+            self.openActionModal(managedObject, actionType);
 
             e.target.closePopup();
           }
@@ -1141,16 +1141,16 @@ export class DataPointIndoorMapComponent
   }
 
   public openActionModal(
-    deviceId: string,
+    managedObject: IManagedObject,
     actionType: "alarm" | "event" | "operation"
   ): void {
     console.log(
-      `Open modal for Device ID: ${deviceId}, Action Type: ${actionType}`
+      `Open modal for Device ID: ${managedObject.id}, Action Type: ${actionType}`
     );
 
     this.modalService.show(LeafletPopupActionModalComponent, {
       initialState: {
-        deviceId: deviceId,
+        device: managedObject,
         actionType: actionType,
       },
     });
@@ -1188,7 +1188,6 @@ export class DataPointIndoorMapComponent
              title ="Create Operation"
         ></i>
     `;
-    // --- END UPDATED ---
 
     if (markerConfig?.popup) {
       // Note: The icons are now prepended to the custom popup content
