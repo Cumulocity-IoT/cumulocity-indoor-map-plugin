@@ -7,35 +7,48 @@
   <div class="card-group">
     <div class="col-xs-12 col-sm-4 col-md-4" *ngFor="let floor of floors">
       <div class="card card-clickable m-b-16">
-      <div class="card-group">
-        <div class="card-block card-column-40">
-        <div class="d-flex justify-content-center align-items-center m-b-12 position-relative">
-          <div class="card-title font-weight-bold">
-            {{ floor.name }}
-          </div>
-          <button type="button" class="btn btn-danger btn-xs " style="position: absolute; right: 15px;" (click)="removeFloor(floor)" title="Remove floor" aria-label="Remove floor">
-            <i [c8yIcon]="'delete'"></i>
-          </button>
-        </div>
+        <div class="card-group">
+          <div class="card-block card-column-40">
+            <div
+              class="d-flex justify-content-center align-items-center m-b-12 position-relative"
+            >
+              <div class="card-title font-weight-bold">
+                {{ floor.name }}
+              </div>
+              <button
+                type="button"
+                class="btn btn-danger btn-xs"
+                style="position: absolute; right: 15px"
+                (click)="removeFloor(floor)"
+                title="Remove floor"
+                aria-label="Remove floor"
+              >
+                <i [c8yIcon]="'delete'"></i>
+              </button>
+            </div>
 
-        <div class="m-b-12 text-center">
-          <img
-          *ngIf="floor['image']"
-          [src]="floor['image']"
-          class="img-thumbnail"
-          alt="{{ floor.name }}"
-          style="
-            max-width: 100%;
-            display: block;
-            margin: 0 auto;
-          "
-          />
-          <div *ngIf="!floor['image']" class="text-muted">No image</div>
+            <div class="m-b-12 text-center">
+              <img
+                *ngIf="floor['image']"
+                [src]="floor['image']"
+                class="img-thumbnail"
+                alt="{{ floor.name }}"
+                style="
+                  max-width: 100% !important;
+
+                  height: auto !important;
+
+                  min-width: 100% !important;
+
+                  width: 100% !important;
+
+                  box-sizing: border-box; 
+                "
+              />
+              <div *ngIf="!floor['image']" class="text-muted">No image</div>
+            </div>
+          </div>
         </div>
-        
-      
-        </div>
-      </div>
       </div>
     </div>
 
@@ -76,8 +89,17 @@
     </div>
   </div>
   <div class="modal-footer">
-  <div class="modal-footer">
-  <button type="button" class="btn btn-default" (click)="cancel()">Cancel</button>
-  <button type="button" class="btn btn-primary" (click)="saveConfiguration()">Save</button>
-</div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-default" (click)="cancel()">
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="saveConfiguration()"
+      >
+        Save
+      </button>
+    </div>
+  </div>
 </div>

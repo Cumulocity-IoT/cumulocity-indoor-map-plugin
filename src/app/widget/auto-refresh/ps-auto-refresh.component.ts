@@ -23,7 +23,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
   imports: [PopoverModule, TooltipModule, FormsModule, CoreModule, ReactiveFormsModule],
 })
 export class PSAutoRefreshComponent implements OnInit, AfterViewInit, OnDestroy {
-  readonly refreshIntervalsInMilliseconds = [10_000, 15_000, 30_000, 60_000];
+  readonly refreshIntervalsInMilliseconds = [30_000, 60_000, 300_000, 600_000];
   readonly DISABLE_AUTO_REFRESH = gettext('Disable auto refresh');
   readonly ENABLE_AUTO_REFRESH = gettext('Enable auto refresh');
   readonly SECONDS_UNTIL_REFRESH = gettext('{{ seconds }} s');
