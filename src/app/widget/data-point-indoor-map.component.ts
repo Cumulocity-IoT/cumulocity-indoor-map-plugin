@@ -22,9 +22,11 @@ import type * as L from "leaflet";
 import { MeasurementRealtimeService } from "@c8y/ngx-components";
 import { BehaviorSubject, fromEvent, Subscription, takeUntil } from "rxjs";
 import { EventPollingService } from "./polling/event-polling.service";
-import { get, isEmpty } from "lodash";
+import { get } from "lodash";
 import { BuildingService } from "../services/building.service";
 import { ImageRotateService } from "../services/image-rotate.service";
+import { BsModalService } from "ngx-bootstrap/modal";
+import { LeafletPopupActionModalComponent } from "./shared/components/leaflet-popup-action-modal/leaflet-popup-action-modal.component";
 
 @Component({
   selector: "data-point-indoor-map",
@@ -105,6 +107,7 @@ export class DataPointIndoorMapComponent
   constructor(
     private buildingService: BuildingService,
     private imageRotateService: ImageRotateService,
+    private modalService: BsModalService,
     private cd: ChangeDetectorRef // 1. OPTIMIZATION: Inject ChangeDetectorRef
   ) {}
 
@@ -635,7 +638,7 @@ export class DataPointIndoorMapComponent
       fromEvent<L.LeafletEvent>(map, "dragend")
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onDragEnd());
-      
+
       this.renderZones(map);
     }
   }
@@ -647,10 +650,12 @@ export class DataPointIndoorMapComponent
   public async refresh(): Promise<void> {
     // Check if the map and building configuration are already initialized.
     if (!this.map || !this.building || !this.config?.buildingId) {
-      console.warn("Map not fully initialized, falling back to full initialization.");
+      console.warn(
+        "Map not fully initialized, falling back to full initialization."
+      );
       // Fallback to the original logic if essential data is missing (e.g., first load)
       this.isLoading$.next(true);
-      await this.ngAfterViewInit(); 
+      await this.ngAfterViewInit();
       return;
     }
 
@@ -666,10 +671,10 @@ export class DataPointIndoorMapComponent
 
       // 2. Refetch the corresponding managed objects for all markers (position, fragments)
       await this.loadManagedObjectsForMarkers(this.building);
-      
+
       // 3. Load latest measurements and events (required for coloring/styling)
-      await this.loadLatestPrimaryMeasurementForMarkers(currentLevel); 
-      
+      await this.loadLatestPrimaryMeasurementForMarkers(currentLevel);
+
       // 4. Unsubscribe and re-subscribe to real-time updates
       this.unsubscribeListeners();
 
@@ -679,7 +684,6 @@ export class DataPointIndoorMapComponent
 
       // 6. Re-calculate and update the filter data properties for the grid/dropdown
       this.updateFilterProperties();
-
     } catch (error) {
       console.error("Error during lightweight map refresh:", error);
     } finally {
@@ -687,7 +691,6 @@ export class DataPointIndoorMapComponent
       this.cd.detectChanges(); // Hide loading indicator and update UI
     }
   }
-
 
   public toggleZoneVisibility(): void {
     if (!this.map) return;
@@ -872,12 +875,54 @@ export class DataPointIndoorMapComponent
 
     // Add tooltip with device information
     const tooltipContent = this.createTooltipContent(managedObject);
-    marker.bindTooltip(tooltipContent, {
-      permanent: false,
-      direction: "top",
-      offset: [0, -10],
-    });
 
+    marker
+      .bindPopup(tooltipContent, {
+        // must set this to true for the click handler to work reliably.
+        interactive: true,
+      })
+      .openPopup();
+    marker.on("popupopen", (e) => {
+      // Get the DOM element containing the popup content
+      const popupElement = e.popup.getElement();
+
+      // Selector to find ALL action icons we added
+      const actionIcons =
+        popupElement?.querySelectorAll<HTMLElement>("[data-action-type]");
+
+      if (actionIcons && actionIcons.length > 0) {
+        // Use a self-referencing variable (self = this) to call the Angular method
+        const self = this;
+
+        // Define the common click handler
+        const iconClickHandler = function (this: HTMLElement) {
+          // Retrieve both the device ID and the action type
+          const deviceId = this.getAttribute("data-device-id");
+          const actionType = this.getAttribute("data-action-type") as
+            | "alarm"
+            | "event"
+            | "operation"
+            | null;
+
+          if (deviceId && actionType) {
+            self.openActionModal(deviceId, actionType);
+            e.target.closePopup();
+          }
+        };
+
+        actionIcons.forEach((icon) => {
+          icon.addEventListener("click", iconClickHandler);
+        });
+
+        const cleanupListener = () => {
+          actionIcons.forEach((icon) => {
+            icon.removeEventListener("click", iconClickHandler);
+          });
+          marker.off("popupclose", cleanupListener); // Remove the cleanup listener itself
+        };
+        marker.once("popupclose", cleanupListener);
+      }
+    });
     return marker;
   }
 
@@ -1043,33 +1088,127 @@ export class DataPointIndoorMapComponent
 
     // Add tooltip for circle markers too
     const tooltipContent = this.createTooltipContent(managedObject);
-    circleMarker.bindTooltip(tooltipContent, {
-      permanent: false,
-      direction: "top",
-      offset: [0, -10],
-    });
 
+    circleMarker
+      .bindPopup(tooltipContent, {
+        // must set this to true for the click handler to work reliably.
+        interactive: true,
+      })
+      .openPopup();
+    circleMarker.on("popupopen", (e) => {
+      // Get the DOM element containing the popup content
+      const popupElement = e.popup.getElement();
+
+      // Selector to find ALL action icons we added
+      const actionIcons =
+        popupElement?.querySelectorAll<HTMLElement>("[data-action-type]");
+
+      if (actionIcons && actionIcons.length > 0) {
+        // Use a self-referencing variable (self = this) to call the Angular method
+        const self = this;
+
+        // Define the common click handler
+        const iconClickHandler = function (this: HTMLElement) {
+          // Retrieve both the device ID and the action type
+          const deviceId = this.getAttribute("data-device-id");
+          const actionType = this.getAttribute("data-action-type") as
+            | "alarm"
+            | "event"
+            | "operation"
+            | null;
+
+          if (deviceId && actionType) {
+            self.openActionModal(deviceId, actionType);
+
+            e.target.closePopup();
+          }
+        };
+
+        actionIcons.forEach((icon) => {
+          icon.addEventListener("click", iconClickHandler);
+        });
+
+        const cleanupListener = () => {
+          actionIcons.forEach((icon) => {
+            icon.removeEventListener("click", iconClickHandler);
+          });
+          circleMarker.off("popupclose", cleanupListener); // Remove the cleanup listener itself
+        };
+        circleMarker.once("popupclose", cleanupListener);
+      }
+    });
     return circleMarker;
+  }
+
+  public openActionModal(
+    deviceId: string,
+    actionType: "alarm" | "event" | "operation"
+  ): void {
+    console.log(
+      `Open modal for Device ID: ${deviceId}, Action Type: ${actionType}`
+    );
+
+    this.modalService.show(LeafletPopupActionModalComponent, {
+      initialState: {
+        deviceId: deviceId,
+        actionType: actionType,
+      },
+    });
   }
 
   private createTooltipContent(managedObject: MarkerManagedObject): string {
     // Get marker configuration from c8y_marker fragment
     const markerConfig = managedObject.c8y_marker;
 
-    // If custom popup content is defined in c8y_marker, use it
+    const deviceId = managedObject.id;
+
+    const modalIconHtml = `
+        <i 
+            id="alarm-${deviceId}" 
+            class="c8y-icon dlt-c8y-icon-alarm pull-right" 
+            style="cursor: pointer;  font-size: 18px; margin-left: 10px;"
+            data-device-id="${deviceId}"
+            data-action-type="alarm"
+            title ="Create Alarm"
+        ></i>
+        <i 
+            id="event-${deviceId}" 
+            class="c8y-icon dlt-c8y-icon-online1 pull-right" 
+            style="cursor: pointer;  font-size: 18px; margin-left: 10px;"
+            data-device-id="${deviceId}"
+            data-action-type="event"
+             title ="Create Event"
+        ></i>
+        <i 
+            id="op-${deviceId}" 
+            class="c8y-icon c8y-icon-device-control pull-right" 
+            style="cursor: pointer;  font-size: 18px; margin-left: 10px;"
+            data-device-id="${deviceId}"
+            data-action-type="operation"
+             title ="Create Operation"
+        ></i>
+    `;
+    // --- END UPDATED ---
+
     if (markerConfig?.popup) {
-      return markerConfig.popup;
+      // Note: The icons are now prepended to the custom popup content
+      return modalIconHtml + markerConfig.popup;
     }
-    return (
-      "Name: " +
-      managedObject["name"] +
-      "<br/>" +
-      "ID: " +
-      managedObject.id +
-      "<br/>" +
-      "Type: " +
-      managedObject["type"]
-    );
+
+    // Default content with the icons
+    return `
+        <div class="indoor-map-popup-content">
+            <span style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-weight: bold;">
+                   Name: ${managedObject["name"]}
+                </span>
+                ${modalIconHtml}
+            </span>
+        </div>
+        <hr style="margin: 5px 0; border-top: 1px solid #eee;">
+        <div>ID: ${managedObject.id}</div>
+        <div>Type: ${managedObject["type"]}</div>
+    `;
   }
 
   private isMarkersAvailableForCurrentFloorLevel(level: number): boolean {
@@ -1100,5 +1239,4 @@ export class DataPointIndoorMapComponent
 
     return uniqueTypes;
   }
-
 }

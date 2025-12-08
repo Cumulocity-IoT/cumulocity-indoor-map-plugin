@@ -1,0 +1,108 @@
+<div class="modal-header separator text-center bg-primary text-white">
+  <h4 class="text-uppercase" style="margin: 0; letter-spacing: 0.15em">
+    {{ title }}
+  </h4>
+</div>
+<div class="modal-body">
+  <form *ngIf="formGroup" [formGroup]="formGroup" class="c8y-form-group">
+    <div class="form-group row">
+      <ng-container *ngIf="actionType === 'alarm'">
+        <div class="col-xs-12 m-b-8">
+          <label>Type (Fragment)</label>
+          <input
+            formControlName="alarmType"
+            type="text"
+            class="form-control"
+            placeholder="e.g., c8y_UnavailabilityAlarm (required)"
+          />
+        </div>
+        <div class="col-xs-12 m-b-8">
+          <label>Severity </label>
+          <select formControlName="severity" class="form-control">
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="MAJOR">MAJOR</option>
+            <option value="MINOR">MINOR</option>
+            <option value="WARNING">WARNING</option>
+          </select>
+        </div>
+        <div class="col-xs-12">
+          <label>Text</label>
+          <textarea
+            formControlName="text"
+            class="form-control"
+            placeholder="e.g., Device exceeded threshold (required)"
+          ></textarea>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="actionType === 'event'">
+        <div class="col-xs-12 m-b-8">
+          <label>Type (Fragment) </label>
+          <input
+            formControlName="eventType"
+            type="text"
+            class="form-control"
+            placeholder="e.g., c8y_LocationUpdate (required)"
+          />
+        </div>
+        <div class="col-xs-12">
+          <label>Text</label>
+          <textarea
+            formControlName="eventText"
+            class="form-control"
+            placeholder="e.g., Location update. (required)"
+          ></textarea>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="actionType === 'operation'">
+        <div class="col-xs-12">
+          <label>Operation Fragment </label>
+          <input
+            formControlName="c8y_Command"
+            type="text"
+            class="form-control"
+            placeholder="e.g., c8y_Relay.relayState"
+          />
+        </div>
+        <div class="col-xs-12 m-t-10">
+          <label>Value</label>
+          <input
+            formControlName="commandValue"
+            type="text"
+            class="form-control"
+            placeholder="e.g., 'ON', 'OFF', or '25'"
+          />
+        </div>
+        <div class="col-xs-12 m-t-10">
+          <c8y-checkbox
+            formControlName="delayExecution"
+            label="Schedule for later"
+            type="checkbox"
+          ></c8y-checkbox>
+        </div>
+      </ng-container>
+
+      <div *ngIf="!actionType" class="col-xs-12 alert alert-warning">
+        No action type provided. Device ID: {{ deviceId }}
+      </div>
+    </div>
+  </form>
+</div>
+<div class="modal-footer">
+  <button
+    type="button"
+    class="btn btn-default"
+    (click)="onCancelButtonClicked()"
+  >
+    Cancel
+  </button>
+  <button
+    type="button"
+    class="btn btn-primary"
+    [disabled]="!formGroup?.valid"
+    (click)="onSaveButtonClicked()"
+  >
+    Save
+  </button>
+</div>

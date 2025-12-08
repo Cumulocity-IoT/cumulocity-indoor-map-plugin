@@ -102,29 +102,29 @@
 }
 
 .action-container {
-    /* STICKY HEADER IMPLEMENTATION (remains the same) */
-    position: sticky;
-    top: 0; 
-    z-index: 10; 
-    background-color: var(--c8y-body-bg, #f4f5f8);
-    padding-top: 10px;
-    padding-bottom: 10px;
-    padding-left: 20px;
-    padding-right: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* STICKY HEADER IMPLEMENTATION (remains the same) */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--c8y-body-bg, #f4f5f8);
+  padding-top: 10px;
+  padding-bottom: 10px;
+  padding-left: 20px;
+  padding-right: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .content-scroll-container {
-    /* SCROLLABLE AREA */
-    /* Ensure this container fills the remaining vertical space of the widget */
-    height: calc(100% - 60px); 
-    overflow-y: auto; 
-    overflow-x: hidden;
+  /* SCROLLABLE AREA */
+  /* Ensure this container fills the remaining vertical space of the widget */
+  height: calc(100% - 60px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .map-container {
-    /* Set the height of the map's wrapper to 70% of the scrollable container's height */
-    padding: 10px;
+  /* Set the height of the map's wrapper to 70% of the scrollable container's height */
+  padding: 10px;
 }
 
 // Custom map marker styles
@@ -140,13 +140,17 @@
 .custom-map-marker {
   transition: all 0.2s ease;
   cursor: pointer;
-  
+
   &:hover {
     transform: scale(1.1);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.4) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4) !important;
   }
-  
+
   i.c8y-icon {
     transition: color 0.2s ease;
   }
+}
+
+.leaflet-popup-content-wrapper {
+  pointer-events: auto;
 }
