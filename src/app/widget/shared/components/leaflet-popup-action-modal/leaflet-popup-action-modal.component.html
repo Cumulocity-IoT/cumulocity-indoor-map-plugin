@@ -1,5 +1,5 @@
 <div class="modal-header separator text-center bg-primary text-white">
-  <h4 class="text-uppercase" style="margin: 0; letter-spacing: 0.15em">
+  <h4 class="text-uppercase">
     {{ title }}
   </h4>
 </div>
@@ -9,12 +9,11 @@
       <ng-container *ngIf="actionType === 'alarm'">
         <div class="col-xs-12 m-b-8">
           <label>Type (Fragment)</label>
-          <input
-            formControlName="alarmType"
-            type="text"
-            class="form-control"
-            placeholder="e.g., c8y_UnavailabilityAlarm (required)"
-          />
+          <select formControlName="alarmType" class="form-control">
+            <option *ngFor="let type of availableAlarmTypes" [value]="type">
+              {{ type }}
+            </option>
+          </select>
         </div>
         <div class="col-xs-12 m-b-8">
           <label>Severity </label>
@@ -36,14 +35,13 @@
       </ng-container>
 
       <ng-container *ngIf="actionType === 'event'">
-        <div class="col-xs-12 m-b-8">
-          <label>Type (Fragment) </label>
-          <input
-            formControlName="eventType"
-            type="text"
-            class="form-control"
-            placeholder="e.g., c8y_LocationUpdate (required)"
-          />
+        <div class="col-xs-12 m-b-10">
+          <label>Type (Fragment)</label>
+          <select formControlName="eventType" class="form-control">
+            <option *ngFor="let type of availableEventTypes" [value]="type">
+              {{ type }}
+            </option>
+          </select>
         </div>
         <div class="col-xs-12">
           <label>Text</label>
@@ -120,7 +118,9 @@
 
           <span class="label label-info m-16">
             To create more predefined commands, click here:
-            <a [href]="'devicemanegement/device/' + device?.id + '/shell'">
+            <a
+              href="/apps/devicemanagement/index.html#/device/{{ device?.id }}"
+            >
               Device Management
             </a>
           </span>
@@ -144,7 +144,7 @@
   <button
     type="button"
     class="btn btn-primary"
-    [disabled]="!formGroup?.valid"
+    [disabled]="!formGroup.valid"
     *ngIf="actionType !== 'operation'"
     (click)="onSaveButtonClicked()"
   >
