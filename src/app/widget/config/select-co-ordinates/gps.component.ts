@@ -53,6 +53,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   public showFloorPlan: boolean = false;
   public floorPlanOpacity: number = 0.5;
   private floorPlanLayer: L.ImageOverlay | undefined;
+  private readonly DEFAULT_CENTER: [number, number] = [51.227, 6.773];
 
   // Image Loading Properties
   private imageBlob?: Blob;
@@ -145,8 +146,14 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async initMap(): Promise<void> {
+    const hasSavedCoords =
+      this.initialConfig?.topLeftLat && this.initialConfig?.topLeftLat !== 0;
+    const initialCenter = hasSavedCoords
+      ? this.getCenterCoordinates(this.initialConfig)
+      : this.DEFAULT_CENTER;
+
     this.map = L.map(this.mapReference.nativeElement, {
-      center: [52.52, 13.4],
+      center: initialCenter,
       zoom: this.currentZoomLevel,
     });
 
@@ -195,6 +202,21 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  getCenterCoordinates(coordinates: any): [number, number] {
+    if (coordinates && coordinates.topLeftLat && coordinates.topLeftLat !== 0) {
+      const topLeftLat = coordinates.topLeftLat;
+      const bottomRightLat = coordinates.bottomRightLat;
+      const topLeftLng = coordinates.topLeftLng;
+      const bottomRightLng = coordinates.bottomRightLng;
+
+      const centerLat = (topLeftLat + bottomRightLat) / 2;
+      const centerLng = (topLeftLng + bottomRightLng) / 2;
+
+      return [centerLat, centerLng];
+    }
+    return [this.DEFAULT_CENTER[0] as number, this.DEFAULT_CENTER[1] as number];
+  }
+
   private initGeomanControl(): void {
     if (!this.map) return;
     const mapWithPm = this.map as any;
@@ -234,9 +256,9 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.featureGroup?.addLayer(layer);
 
       // Explicitly tag as Rectangle to prevent vertex skewing
-      if (layer.pm) {
+      /*  if (layer.pm) {
         layer.pm._type = "Rectangle";
-      }
+      } */
 
       this.enableLayerInteraction(layer);
       this.handleLayerUpdate(layer);
@@ -390,11 +412,16 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private centerMapOnBounds(): void {
     const bounds = this.getImageBounds();
-    if (this.map && bounds.isValid()) {
+
+    // Only attempt to fit bounds if the coordinates are actually set (not 0)
+    if (this.map && bounds.isValid() && this.imageBounds().tl.lat !== 0) {
       const center = bounds.getCenter();
       this.map.setView(center, this.currentZoomLevel, {
         animate: false,
       });
+    } else if (this.map) {
+      // Fallback if no bounds drawn yet: Center on Düsseldorf
+      this.map.setView(this.DEFAULT_CENTER, this.currentZoomLevel);
     }
   }
 
