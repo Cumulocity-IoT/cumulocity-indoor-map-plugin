@@ -298,46 +298,6 @@ export class MoveMarkerMapComponent
     });
   }
 
-  /*  private async updateImageOverlay(): Promise<void> {
-    if (
-      !this.map ||
-      !this.topleftLat ||
-      !this.topleftLng ||
-      !this.bottomrightLat ||
-      !this.bottomrightLng
-    ) {
-      return;
-    }
-
-    const l = await this.leaf;
-
-    if (this.imageLayer) {
-      this.map.removeLayer(this.imageLayer);
-      const src = this.imageLayer.getElement()?.src;
-      if (src) {
-        URL.revokeObjectURL(src);
-      }
-      this.imageLayer = undefined;
-    }
-
-    if (this.imageBlob) {
-      const bounds = l.latLngBounds(
-        [this.topleftLat, this.topleftLng],
-        [this.bottomrightLat, this.bottomrightLng]
-      );
-      const imgBlobURL = URL.createObjectURL(this.imageBlob);
-
-      this.imageLayer = l
-        .imageOverlay(imgBlobURL, bounds, {
-          opacity: 1,
-          interactive: true,
-        })
-        .addTo(this.map);
-
-      this.map.fitBounds(bounds);
-    }
-  } */
-
   private async waitForMapInitialization(): Promise<void> {
     if (this.map) return Promise.resolve();
     await this.leaf;

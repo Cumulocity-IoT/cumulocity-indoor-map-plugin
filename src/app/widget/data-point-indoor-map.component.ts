@@ -293,11 +293,7 @@ export class DataPointIndoorMapComponent
   }
 
   private getValidatedControlPoints():
-    | {
-        topleft: L.LatLng;
-        topright: L.LatLng;
-        bottomleft: L.LatLng;
-      }
+    | { topleft: L.LatLng; topright: L.LatLng; bottomleft: L.LatLng }
     | undefined {
     // 1. Try to get accurate polygon points first (for rotated images)
     const polygonPoints = this.getPolygonControlPoints();
@@ -305,65 +301,30 @@ export class DataPointIndoorMapComponent
       return polygonPoints;
     }
 
-    // 2. Fallback: Use the bounding box corners if polygon data is missing
+    // 2. Fallback: Use bounding box corners ONLY if polygon data is missing
     const coords = this.building?.coordinates;
-    if (!coords) {
-      return undefined;
-    }
+    if (!coords) return undefined;
 
-    // Safely extract coordinates, defaulting to 0 for error prevention
     const topLat = coords.topLeftLat ?? 0;
     const leftLng = coords.topLeftLng ?? 0;
     const bottomLat = coords.bottomRightLat ?? 0;
     const rightLng = coords.bottomRightLng ?? 0;
 
-    // Ensure at least some coordinate data is present (e.g., non-zero) for a valid overlay
-    if (!topLat && !leftLng && !bottomLat && !rightLng) {
-      return undefined;
-    }
+    if (!topLat && !leftLng && !bottomLat && !rightLng) return undefined;
 
-    // Create the three LatLng objects using bounding box logic
-    const topleft = this.leaf.latLng(topLat, leftLng);
-    const topright = this.leaf.latLng(topLat, rightLng);
-    const bottomleft = this.leaf.latLng(bottomLat, leftLng);
-
-    return { topleft, topright, bottomleft };
+    // Manual mapping for non-rotated rectangles
+    return {
+      topleft: this.leaf.latLng(topLat, leftLng),
+      topright: this.leaf.latLng(topLat, rightLng),
+      bottomleft: this.leaf.latLng(bottomLat, leftLng),
+    };
   }
 
   private initMap(building: MapConfiguration, level: number): L.Map {
     const currentMapConfigurationLevel = building.levels[level];
-
-    const bounds = this.calculateBounds();
-    // ... (Map initialization logic remains the same for brevity) ...
-
     const controlPoints = this.getValidatedControlPoints();
-    if (!controlPoints) {
-      // If image control points are missing, but bounds exist, still initialize map
-      const map = this.leaf.map(this.mapReference.nativeElement);
-      this.leaf.Control.Attribution.prototype.options.prefix = false;
-      this.leaf
-        .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        })
-        .addTo(map);
-
-      if (bounds) {
-        const zoom = this.building?.coordinates.zoomLevel;
-        const center = this.getCenterCoordinates(this.building?.coordinates);
-        map.setView(center, zoom);
-      } else {
-        map.setView(
-          this.getCenterCoordinates(this.building?.coordinates),
-          this.building?.coordinates?.zoomLevel
-        );
-      }
-      return map;
-    }
-    const { topleft, topright, bottomleft } = controlPoints;
 
     const map = this.leaf.map(this.mapReference.nativeElement);
-
     (this.leaf.Control.Attribution.prototype as any).options.prefix = false;
 
     this.leaf
@@ -375,36 +336,37 @@ export class DataPointIndoorMapComponent
       })
       .addTo(map);
 
-    if (currentMapConfigurationLevel?.blob) {
+    if (currentMapConfigurationLevel?.blob && controlPoints) {
       const imgBlobURL = URL.createObjectURL(currentMapConfigurationLevel.blob);
+
+      // Using the rotated factory with three-point anchoring for perfect alignment
       const imageOverlay = (this.leaf.imageOverlay as any).rotated(
         imgBlobURL,
-        topleft,
-        topright,
-        bottomleft,
-        {
-          opacity: 1,
-          interactive: true,
-        }
+        controlPoints.topleft,
+        controlPoints.topright,
+        controlPoints.bottomleft,
+        { opacity: 1, interactive: true }
       );
       imageOverlay.addTo(map);
 
-      const zoom = this.building?.coordinates.zoomLevel;
+      // FIX: Center map on building coordinates with the correct zoom level
+      const zoom = this.building?.coordinates.zoomLevel || 18;
       const center = this.getCenterCoordinates(this.building?.coordinates);
-
       map.setView(center, zoom);
 
+      // Setup event listeners for persistence
       fromEvent<L.LeafletEvent>(map, "zoomend")
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onZoomEnd());
-
       fromEvent<L.LeafletEvent>(map, "dragend")
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.onDragEnd());
     }
+
     this.renderZones(map);
     return map;
   }
+
   private onZoomEnd() {
     /* ... */
   }
