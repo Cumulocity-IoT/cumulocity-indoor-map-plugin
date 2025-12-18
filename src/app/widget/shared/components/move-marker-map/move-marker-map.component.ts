@@ -118,29 +118,45 @@ export class MoveMarkerMapComponent
   ):
     | { topleft: L.LatLng; topright: L.LatLng; bottomleft: L.LatLng }
     | undefined {
-    // 1. Prioritize true Polygon vertices
+    // 1. Prioritize true Polygon vertices (handles tilt/skew)
     if (this.polygonVerticesJson) {
       try {
         const polygonData = JSON.parse(this.polygonVerticesJson);
-        const vertices = polygonData[0];
+        // Geoman usually saves as a nested array [[p1, p2, p3, p4]]
+        const ring = Array.isArray(polygonData[0])
+          ? polygonData[0]
+          : polygonData;
 
-        if (vertices && vertices.length >= 4) {
-          const V1 = vertices[0];
-          const V2 = vertices[1];
-          const V4 = vertices[3];
+        if (ring && ring.length >= 4) {
+          // Geometric Sort: Find TL, TR, and BL regardless of vertex order
+          const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
+          const topTwo = [sortedByLat[0], sortedByLat[1]].sort(
+            (a, b) => a.lng - b.lng
+          );
 
-          const topleft = l.latLng(V1.lat ?? 0, V1.lng ?? 0);
-          const topright = l.latLng(V2.lat ?? 0, V2.lng ?? 0);
-          const bottomleft = l.latLng(V4.lat ?? 0, V4.lng ?? 0);
+          const tl = topTwo[0]; // Most Northern + Most Western
+          const tr = topTwo[1]; // Most Northern + Most Eastern
 
-          return { topleft, topright, bottomleft };
+          const remaining = ring.filter(
+            (p: any) =>
+              (p.lat !== tl.lat || p.lng !== tl.lng) &&
+              (p.lat !== tr.lat || p.lng !== tr.lng)
+          );
+          const bl =
+            remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
+
+          return {
+            topleft: l.latLng(tl.lat, tl.lng),
+            topright: l.latLng(tr.lat, tr.lng),
+            bottomleft: l.latLng(bl.lat, bl.lng),
+          };
         }
       } catch (e) {
-        console.error("Failed to parse polygonVerticesJson for overlay:", e);
+        console.error("Failed to parse polygonVerticesJson:", e);
       }
     }
 
-    // 2. Fallback: Use the bounding box corners
+    // 2. Fallback: Use standard AABB corners if no rotation is present
     if (
       !this.topleftLat ||
       !this.topleftLng ||
@@ -150,72 +166,51 @@ export class MoveMarkerMapComponent
       return undefined;
     }
 
-    const topleft = l.latLng(this.topleftLat, this.topleftLng);
-    const topright = l.latLng(this.topleftLat, this.bottomrightLng);
-    const bottomleft = l.latLng(this.bottomrightLat, this.topleftLng);
-
-    return { topleft, topright, bottomleft };
+    return {
+      topleft: l.latLng(this.topleftLat, this.topleftLng),
+      topright: l.latLng(this.topleftLat, this.bottomrightLng),
+      bottomleft: l.latLng(this.bottomrightLat, this.topleftLng),
+    };
   }
 
   private async updateImageOverlay(): Promise<void> {
-    if (
-      !this.map ||
-      !this.topleftLat ||
-      !this.topleftLng ||
-      !this.bottomrightLat ||
-      !this.bottomrightLng
-    ) {
-      return;
-    }
+    if (!this.map || !this.topleftLat || !this.topleftLng) return;
 
     const l = await this.leaf;
 
+    // Cleanup existing layer
     if (this.imageLayer) {
       this.map.removeLayer(this.imageLayer);
-      const src = this.imageLayer.getElement()?.src;
-      if (src) {
-        URL.revokeObjectURL(src);
-      }
       this.imageLayer = undefined;
     }
 
     if (this.imageBlob) {
       const controlPoints = this.getValidatedControlPoints(l);
-      const bounds = this.calculateBounds(l);
-
-      if (!controlPoints) {
-        console.warn("Cannot update image overlay: Control points missing.");
-        return;
-      }
-
       const imgBlobURL = URL.createObjectURL(this.imageBlob);
+      const rotatedFactory = (l.imageOverlay as any).rotated;
 
-      const imageOverlayFactory = (l.imageOverlay as any).rotated;
-
-      if (imageOverlayFactory) {
-        this.imageLayer = imageOverlayFactory(
+      if (rotatedFactory && controlPoints) {
+        // Use the three-point anchor system for real-time tilt alignment
+        this.imageLayer = rotatedFactory(
           imgBlobURL,
           controlPoints.topleft,
           controlPoints.topright,
           controlPoints.bottomleft,
-          {
-            opacity: 1,
-            interactive: true,
-          }
+          { opacity: 1, interactive: true }
         ).addTo(this.map);
-      } else {
-        this.imageLayer = l
-          .imageOverlay(imgBlobURL, bounds, {
-            opacity: 1,
-            interactive: true,
-          })
-          .addTo(this.map);
-        console.warn(
-          "L.imageOverlay.rotated not found. Alignment may be incorrect."
-        );
-      }
 
-      this.map.fitBounds(bounds);
+        // Fit the map to the actual tilted layer bounds
+        if (this.imageLayer) {
+          this.map.fitBounds(this.imageLayer.getBounds());
+        }
+      } else {
+        // Standard fallback for non-rotated environments
+        const bounds = this.calculateBounds(l);
+        this.imageLayer = l
+          .imageOverlay(imgBlobURL, bounds, { opacity: 1 })
+          .addTo(this.map);
+        this.map.fitBounds(bounds);
+      }
     }
   }
 

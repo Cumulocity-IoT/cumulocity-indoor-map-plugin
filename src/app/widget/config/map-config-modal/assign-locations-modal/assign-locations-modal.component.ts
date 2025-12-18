@@ -71,7 +71,7 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
     this.leaf = await import("leaflet");
     this.imageRotateService.initialize(this.leaf);
 
-    this.selectLevel(this.building.levels[0]);
+    this.selectLevel(this.building?.levels[0]);
     console.log(this.building);
     console.log(this.selectedLevel);
     if (
@@ -101,7 +101,8 @@ export class AssignLocationModalComponent implements OnInit, OnDestroy {
     if (level.binaryId) {
       this.selectedItem = undefined;
       delete this.safeDataUrl;
-      this.managedObjectsForSelectedLevel = this.managedObjectsForFloorLevels[this.building.levels.indexOf(level)];
+      this.managedObjectsForSelectedLevel =
+        this.managedObjectsForFloorLevels[this.building.levels.indexOf(level)];
       if (this.imageCache.has(level.binaryId)) {
         const imageUrl = this.imageCache.get(level.binaryId)!;
         this.safeDataUrl = this.sanitizer.bypassSecurityTrustUrl(imageUrl);
