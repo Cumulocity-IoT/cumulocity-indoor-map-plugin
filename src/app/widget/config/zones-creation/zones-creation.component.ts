@@ -48,6 +48,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     br: { lat: 0, lng: 0 },
   });
   public currentFloorLevel: number = 0;
+  public currentZoomLevel!: number;
   private readonly MAX_ZOOM = 23;
 
   private allZonesByLevel: { [levelId: string]: string } = {};
@@ -104,6 +105,13 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
         );
       }
     }
+    if (this.initialConfig?.coordinates?.zoomLevel) {
+      this.currentZoomLevel = Math.floor(
+        this.initialConfig.coordinates.zoomLevel
+      );
+    } else {
+      this.currentZoomLevel = 18; // Default fallback
+    }
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -135,49 +143,57 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     | { topleft: L.LatLng; topright: L.LatLng; bottomleft: L.LatLng }
     | undefined {
     const coords = this.initialConfig.coordinates;
-    if (!coords) {
-      return undefined;
-    }
+    if (!coords) return undefined;
 
-    // 1. Prioritize true Polygon vertices if available (for rotation/skew)
+    // 1. Prioritize Polygon vertices (Matches GPS sequential order: TL, TR, BR, BL)
     if (coords.polygonVerticesJson) {
       try {
         const polygonData = JSON.parse(coords.polygonVerticesJson);
-        const vertices = polygonData[0]; // Assuming array of arrays
+        // Geoman usually returns a nested array [[p1, p2, p3, p4]]
+        const ring = Array.isArray(polygonData[0])
+          ? polygonData[0]
+          : polygonData;
 
-        if (vertices && vertices.length >= 4) {
-          const V1 = vertices[0];
-          const V2 = vertices[1];
-          const V4 = vertices[3];
+        if (ring && ring.length >= 4) {
+          // Use the same sorting/anchor logic as GPS component to prevent flipping
+          const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
+          const topTwo = [sortedByLat[0], sortedByLat[1]].sort(
+            (a, b) => a.lng - b.lng
+          );
 
-          // Use L.latLng directly with optional chaining/nullish coalescing for safety
-          const topleft = L.latLng(V1.lat ?? 0, V1.lng ?? 0);
-          const topright = L.latLng(V2.lat ?? 0, V2.lng ?? 0);
-          const bottomleft = L.latLng(V4.lat ?? 0, V4.lng ?? 0);
+          const tl = topTwo[0];
+          const tr = topTwo[1];
 
-          return { topleft, topright, bottomleft };
+          const remaining = ring.filter(
+            (p: any) =>
+              (p.lat !== tl.lat || p.lng !== tl.lng) &&
+              (p.lat !== tr.lat || p.lng !== tr.lng)
+          );
+          const bl =
+            remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
+
+          return {
+            topleft: L.latLng(tl.lat, tl.lng),
+            topright: L.latLng(tr.lat, tr.lng),
+            bottomleft: L.latLng(bl.lat, bl.lng),
+          };
         }
       } catch (e) {
         console.error("Failed to parse polygonVerticesJson for overlay:", e);
       }
     }
 
-    // 2. Fallback: Use the bounding box corners
+    // 2. Fallback: Use the bounding box corners if no tilt is present
     const topLat = coords.topLeftLat ?? 0;
     const leftLng = coords.topLeftLng ?? 0;
     const bottomLat = coords.bottomRightLat ?? 0;
     const rightLng = coords.bottomRightLng ?? 0;
 
-    if (!topLat && !leftLng && !bottomLat && !rightLng) {
-      return undefined;
-    }
-
-    // Create the three LatLng objects using bounding box logic
-    const topleft = L.latLng(topLat, leftLng);
-    const topright = L.latLng(topLat, rightLng);
-    const bottomleft = L.latLng(bottomLat, leftLng);
-
-    return { topleft, topright, bottomleft };
+    return {
+      topleft: L.latLng(topLat, leftLng),
+      topright: L.latLng(topLat, rightLng),
+      bottomleft: L.latLng(bottomLat, leftLng),
+    };
   }
 
   private async initMap() {
@@ -189,7 +205,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     // Map initialization
     this.map = L.map(this.mapReference.nativeElement, {
       center: bounds?.getCenter() || [52.52, 13.4],
-      zoom: this.initialConfig.coordinates?.zoomLevel || 18,
+      zoom: this.currentZoomLevel,
     });
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -208,24 +224,14 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  /**
-   * Refactored logic to place the image overlay using the three-point method.
-   */
   private async placeImageOverlay(binaryId: string): Promise<void> {
     const controlPoints = this.getValidatedControlPoints();
-
-    if (!controlPoints) {
-      console.warn("Cannot place image overlay: Control points missing.");
-      return;
-    }
+    if (!controlPoints) return;
 
     try {
       const imgSource = URL.createObjectURL(await this.getImage(binaryId));
-
-      // Access the rotated factory registered by ImageRotateService
       const imageOverlayFactory = (L.imageOverlay as any).rotated;
 
-      // Use the three-point factory for accurate georeferencing
       if (imageOverlayFactory) {
         this.imageOverlayLayer = imageOverlayFactory(
           imgSource,
@@ -236,16 +242,17 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
         );
 
         this.imageOverlayLayer!.addTo(this.map!);
-        this.map!.fitBounds(this.imageOverlayLayer!.getBounds());
+
+        // Use the actual layer bounds to fit the map, accounting for the tilt
+        const layerBounds = this.imageOverlayLayer!.getBounds();
+        this.map!.fitBounds(layerBounds);
       } else {
-        // Fallback to standard overlay if plugin is not initialized (should not happen)
+        // Fallback logic
         const bounds = this.getLeafletBounds(this.imageBounds());
         this.imageOverlayLayer = L.imageOverlay(imgSource, bounds!, {
           opacity: 1,
-          interactive: true,
         });
         this.imageOverlayLayer.addTo(this.map!);
-        this.map!.fitBounds(bounds!);
       }
     } catch (error) {
       console.error("Failed to place image overlay:", error);
@@ -326,10 +333,10 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       drawPolyline: false,
       drawCircle: false,
       drawRectangle: true,
-      drawPolygon: true,
+      drawPolygon: false,
       drawText: false,
       editMode: true,
-      dragMode: false,
+      dragMode: true,
       cutPolygon: false,
       deleteMode: true,
       rotateMode: true,
@@ -354,7 +361,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       }, 50);
     });
 
-    mapWithPm.on("pm:edit", (e: any) => {
+    mapWithPm.on("pm:edit pm:dragend", (e: any) => {
       this.updateZonesState();
     });
 
@@ -433,6 +440,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
       this.map.invalidateSize(true);
       this.centerMapOnBounds();
+      this.map.setZoom(this.currentZoomLevel);
     }
   }
 
