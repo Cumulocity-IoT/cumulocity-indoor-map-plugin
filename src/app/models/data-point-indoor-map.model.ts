@@ -115,6 +115,7 @@ export interface DeviceMarker {
   icon_color?: string;
   icon_size?: number;
   popup?: string;
+  label?: string;
 }
 
 export interface ZoneGeometry {

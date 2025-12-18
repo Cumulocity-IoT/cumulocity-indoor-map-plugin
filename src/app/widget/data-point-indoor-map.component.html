@@ -114,5 +114,5 @@
     </div>
   </div>
 
-  <map-data-grid [devices]="filteredDevicesForGrid"></map-data-grid>
+  <map-data-grid [devices]="filteredDevicesForGrid" (rowClicked)="highlightRow($event)"></map-data-grid>
 </div>

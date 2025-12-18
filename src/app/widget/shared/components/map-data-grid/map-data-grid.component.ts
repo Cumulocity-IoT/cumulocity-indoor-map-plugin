@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from "@angular/core";
+import { Component, EventEmitter, Input, OnInit, Output } from "@angular/core";
 import { RouterModule } from "@angular/router";
 import {
   ActionControl,
@@ -26,6 +26,9 @@ import { IManagedObject } from "@c8y/client";
 })
 export class MapDataGridComponent implements OnInit {
   @Input() devices: IManagedObject[] = [];
+  @Output() rowClicked = new EventEmitter<Row>();
+
+
 
   /** This will be used as a title for the data grid. */
 
@@ -118,5 +121,11 @@ export class MapDataGridComponent implements OnInit {
   onRemoveCustomColumn(column: Column) {
     console.log("custom column removed:");
     console.log(column);
+  }
+
+  onRowClick(row: Row) {
+    console.log("row clicked:");
+    console.log(row);
+    this.rowClicked.emit(row);
   }
 }

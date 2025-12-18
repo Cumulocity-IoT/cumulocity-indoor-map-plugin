@@ -19,7 +19,7 @@ import {
   WidgetConfiguration,
 } from "../models/data-point-indoor-map.model";
 import type * as L from "leaflet";
-import { MeasurementRealtimeService } from "@c8y/ngx-components";
+import { MeasurementRealtimeService, Row } from "@c8y/ngx-components";
 import { BehaviorSubject, fromEvent, Subscription, takeUntil } from "rxjs";
 import { EventPollingService } from "./polling/event-polling.service";
 import { get } from "lodash";
@@ -99,6 +99,8 @@ export class DataPointIndoorMapComponent
   destroy$ = new EventEmitter<void>();
 
   private markersLayer?: L.FeatureGroup; // Feature group to hold the markers
+  private highlightedMarker?: L.Marker | L.CircleMarker; // Currently highlighted marker
+  private originalMarkerStyle?: any; // Original style of highlighted marker
 
   // 1. OPTIMIZATION: New properties to replace getters
   public filteredDevicesForGrid: IManagedObject[] = []; // Used for the data grid
@@ -154,6 +156,9 @@ export class DataPointIndoorMapComponent
   async onLevelChanged() {
     this.cd.detectChanges(); // Show loading
 
+    // Clear any existing highlight when changing levels
+    this.clearMarkerHighlight();
+
     const level = this.currentFloorLevel;
     this.buildingService.unsubscribeAllMeasurements();
     if (this.eventThresholdSub) {
@@ -185,6 +190,9 @@ export class DataPointIndoorMapComponent
    * Public method to call when searchString or selectedType changes from the HTML.
    */
   public filterMarkers(): void {
+    // Clear any existing highlight when filtering
+    this.clearMarkerHighlight();
+    
     if (this.map) {
       this.initMarkers(this.map, this.currentFloorLevel);
     }
@@ -911,36 +919,84 @@ export class DataPointIndoorMapComponent
     const iconColor = markerConfig?.icon_color || color;
     const iconSize = markerConfig?.icon_size || this.configuredIconSize;
 
-    const markerSize = markerConfig?.size || 36;
+    const markerSize = Number(markerConfig?.size) || 36;
     const markerColor = markerConfig?.color || "#000000";
 
-    // Create the icon HTML with Cumulocity icon classes
+    // Get label content from managed object
+    const labelContent = this.createMarkerLabelContent(managedObject);
+    
+    // Create the icon HTML with Cumulocity icon classes and label
     const iconHtml = `
-      <div class="custom-map-marker" style="
-        width: ${markerSize}px;
-        height: ${markerSize}px;
-        background-color: ${markerColor};
-        opacity: ${opacity};
-        border: ${borderWidth}px solid ${borderColor};
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      ">
-      <i class="d-block c8y-icon dlt-c8y-icon-${iconName}" style="
-          color: ${iconColor};
-          font-size: ${iconSize}px;
-        "></i>
+      <div class="custom-map-marker-wrapper">
+        <div class="custom-map-marker" style="
+          width: ${markerSize}px;
+          height: ${markerSize}px;
+          background-color: ${markerColor};
+          opacity: ${opacity};
+          border: ${borderWidth}px solid ${borderColor};
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        ">
+          <i class="d-block c8y-icon dlt-c8y-icon-${iconName}" style="
+            color: ${iconColor};
+            font-size: ${iconSize}px;
+          "></i>
+        </div>
+        ${labelContent ? `<div class="marker-label">${labelContent}</div>` : ''}
       </div>
     `;
+
+    // Adjust icon size and anchor to account for label
+    const iconSizeWithLabel: [number, number] = [Math.max(markerSize, 120), markerSize + (labelContent ? 25 : 0)];
+    const iconAnchorWithLabel: [number, number] = [iconSizeWithLabel[0] / 2, markerSize / 2];
 
     return this.leaf.divIcon({
       html: iconHtml,
       className: "custom-map-marker-container",
-      iconSize: this.ICON_SIZE,
-      iconAnchor: this.ICON_ANCHOR,
+      iconSize: iconSizeWithLabel,
+      iconAnchor: iconAnchorWithLabel,
     });
+  }
+
+  /**
+   * Creates label content for marker based on managed object data
+   * 
+   * Usage: Add a label to your managed object with the c8y_marker fragment:
+   * {
+   *   "c8y_marker": {
+   *     "label": "Custom Label Text"
+   *   }
+   * }
+   * 
+   * If no custom label is provided, it falls back to:
+   * 1. Device name (truncated to 20 chars)
+   * 2. Device type
+   * 3. Device ID
+   */
+  private createMarkerLabelContent(managedObject: MarkerManagedObject): string {
+    // Check if custom label is defined in c8y_marker fragment
+    const markerConfig = managedObject.c8y_marker;
+    if (markerConfig?.label) {
+      return markerConfig.label;
+    }
+
+    // Default label logic - show device name or type
+    const name = managedObject["name"];
+    const type = managedObject["type"];
+    
+    // Priority: name > type > id
+    if (name && name.length <= 20) {
+      return name;
+    } else if (name && name.length > 20) {
+      return name.substring(0, 17) + "...";
+    } else if (type) {
+      return type;
+    } else {
+      return managedObject.id || "Device";
+    }
   }
 
   /**
@@ -1178,6 +1234,149 @@ export class DataPointIndoorMapComponent
       this.markerManagedObjectsForFloorLevel.length > 0 &&
       !!this.markerManagedObjectsForFloorLevel[level]
     );
+  }
+
+  /**
+   * Highlights and zooms to the marker corresponding to the clicked row
+   */
+  public highlightRow(row: Row): void {
+
+    console.log('Highlighting row:', row);
+
+    if (!this.map || !row) {
+      console.log('No map or no row');
+      return;
+    }
+
+    // The device data is directly in the row object, not in row.item
+    const deviceId = row.id || row['item']?.id;
+    console.log('Looking for device ID:', deviceId);
+    console.log('Current floor level:', this.currentFloorLevel);
+    console.log('Available markers:', Object.keys(this.markerManagedObjectsForFloorLevel[this.currentFloorLevel] || {}));
+    
+    const markerManagedObject = this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]?.[deviceId];
+    
+    if (!markerManagedObject) {
+      console.warn('Marker not found for device:', deviceId);
+      console.warn('Available devices on this level:', this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]);
+      return;
+    }
+
+    console.log('Found marker managed object:', markerManagedObject);
+
+    const markerInstance = markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] as L.Marker | L.CircleMarker;
+    
+    if (!markerInstance) {
+      console.warn('Marker instance not found for device:', deviceId);
+      console.warn('KEY_MAP_MARKER_INSTANCE:', this.KEY_MAP_MARKER_INSTANCE);
+      console.warn('Available keys in markerManagedObject:', Object.keys(markerManagedObject));
+      return;
+    }
+
+    console.log('Found marker instance:', markerInstance);
+
+    // Clear previous highlight
+    this.clearMarkerHighlight();
+
+    // Store reference to currently highlighted marker
+    this.highlightedMarker = markerInstance;
+
+    // Get marker position
+    const position = markerInstance.getLatLng();
+    console.log('Marker position:', position);
+    console.log('Current map center:', this.map.getCenter());
+    console.log('Current map zoom:', this.map.getZoom());
+
+    // Apply highlight styling
+    this.applyMarkerHighlight(markerInstance);
+
+    // Pan and zoom to the marker with fixed zoom level
+    const currentZoom = this.map.getZoom();
+    const targetZoom = 18; // Fixed zoom level to prevent continuous zooming
+    
+    console.log('Current zoom:', currentZoom, 'Target zoom:', targetZoom);
+    
+    // Use flyTo for smooth combined pan and zoom
+    this.map.flyTo(position, targetZoom, {
+      animate: true,
+      duration: 0.8,
+      easeLinearity: 0.25
+    });
+
+    // Optional: Open popup if marker has one
+    if (markerInstance.getPopup()) {
+      markerInstance.openPopup();
+    }
+  }
+
+  /**
+   * Applies highlight styling to a marker
+   */
+  private applyMarkerHighlight(marker: L.Marker | L.CircleMarker): void {
+    console.log('Applying highlight to marker:', marker);
+    console.log('useIcons setting:', this.useIcons);
+    
+    // Check if it's a circle marker by checking if it has setStyle method
+    if (marker && typeof (marker as any).setStyle === 'function') {
+      console.log('Highlighting circle marker');
+      // Store original style for circle markers
+      this.originalMarkerStyle = {
+        color: (marker as any).options.color,
+        weight: (marker as any).options.weight,
+        fillOpacity: (marker as any).options.fillOpacity
+      };
+
+      // Apply highlight style with prominent border
+      (marker as any).setStyle({
+        color: this.MARKER_HIGHLIGHT_COLOR,
+        weight: 6, // Thicker border for clicked highlight
+        fillOpacity: 1.0
+      });
+    } else {
+      console.log('Highlighting icon marker');
+      // For icon markers, add border highlight effect
+      const markerElement = marker.getElement();
+      console.log('Marker element:', markerElement);
+      
+      if (markerElement) {
+        markerElement.classList.add('marker-highlighted');
+        markerElement.classList.add('marker-clicked-highlight');
+        console.log('Added marker highlight classes');
+      
+      }
+    }
+  }
+
+  /**
+   * Clears the current marker highlight
+   */
+  private clearMarkerHighlight(): void {
+    if (!this.highlightedMarker) {
+      return;
+    }
+
+    console.log('Clearing highlight from marker:', this.highlightedMarker);
+
+    // Check if it's a circle marker by checking if it has setStyle method
+    if (typeof (this.highlightedMarker as any).setStyle === 'function' && this.originalMarkerStyle) {
+      // Restore original style for circle markers
+      (this.highlightedMarker as any).setStyle(this.originalMarkerStyle);
+    } else {
+      // Remove highlight class and inline styles for icon markers
+      const markerElement = this.highlightedMarker.getElement();
+      if (markerElement) {
+        markerElement.classList.remove('marker-highlighted');
+        markerElement.classList.remove('marker-clicked-highlight');
+        (markerElement as HTMLElement).style.border = '';
+        (markerElement as HTMLElement).style.borderRadius = '';
+        (markerElement as HTMLElement).style.boxShadow = '';
+        (markerElement as HTMLElement).style.animation = '';
+        (markerElement as HTMLElement).style.zIndex = '';
+      }
+    }
+
+    this.highlightedMarker = undefined;
+    this.originalMarkerStyle = undefined;
   }
 
   /**
