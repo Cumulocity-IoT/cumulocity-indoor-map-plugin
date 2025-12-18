@@ -204,7 +204,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Map initialization
     this.map = L.map(this.mapReference.nativeElement, {
-      center: bounds?.getCenter() || [52.52, 13.4],
+      center: bounds?.getCenter() || [51.227, 6.773],
       zoom: this.currentZoomLevel,
     });
 

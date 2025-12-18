@@ -45,7 +45,7 @@ export class MoveMarkerMapComponent
   @Input() topleftLng: number = -0.12;
   @Input() bottomrightLat: number = 51.49;
   @Input() bottomrightLng: number = -0.07;
-  @Input() zoomLevel: number = 13;
+  @Input() zoomLevel?: number = 18;
   @Input() polygonVerticesJson?: string;
   @Input() rotationAngle: number = 0;
 
@@ -99,8 +99,14 @@ export class MoveMarkerMapComponent
 
     const bounds = this.calculateBounds(l);
 
-    map.setView(bounds.getCenter(), this.zoomLevel);
-    map.fitBounds(bounds);
+    const hasValidBounds = this.topleftLat !== 51.52 && this.topleftLat !== 0;
+
+    if (hasValidBounds) {
+      map.setView(bounds.getCenter(), this.zoomLevel);
+      map.fitBounds(bounds);
+    } else {
+      map.setView([51.227, 6.773], this.zoomLevel);
+    }
 
     this.setupMarkerAndClickListener(l, map);
 
@@ -368,7 +374,7 @@ export class MoveMarkerMapComponent
         (coordinates.topLeftLng + coordinates.bottomRightLng) / 2;
       return [centerLat, centerLng];
     } else {
-      return [51.23544, 6.79599];
+      return [51.227, 6.773];
     }
   }
 }
