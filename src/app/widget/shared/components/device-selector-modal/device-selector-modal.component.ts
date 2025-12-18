@@ -1,9 +1,10 @@
-import { Component } from "@angular/core";
+import { Component, OnInit } from "@angular/core";
 import { IIdentified, IManagedObject } from "@c8y/client";
 import { CommonModule, CoreModule } from "@c8y/ngx-components";
 import {
   AssetSelectionChangeEvent,
   AssetSelectorModule,
+  GroupNodeService,
 } from "@c8y/ngx-components/assets-navigator";
 import { BsModalRef } from "ngx-bootstrap/modal";
 import { Subject } from "rxjs";
@@ -14,7 +15,7 @@ import { Subject } from "rxjs";
   standalone: true,
   imports: [CommonModule, AssetSelectorModule, CoreModule],
 })
-export class DeviceSelectorModalComponent {
+export class DeviceSelectorModalComponent implements OnInit {
   config = {
     columnHeaders: true,
     groupsSelectable: true,
@@ -34,7 +35,15 @@ export class DeviceSelectorModalComponent {
 
   closeSubject: Subject<IManagedObject[] | undefined> = new Subject();
 
-  constructor(private modal: BsModalRef) {}
+  constructor(
+    private modal: BsModalRef,
+    private groupNodeService: GroupNodeService
+  ) {}
+
+  ngOnInit() {
+    // Increase the page size to show more elements (default is usually 20)
+    (this.groupNodeService as any).PAGE_SIZE = 150;
+  }
 
   selectionChanged(event: AssetSelectionChangeEvent) {
     console.log(event, "device");

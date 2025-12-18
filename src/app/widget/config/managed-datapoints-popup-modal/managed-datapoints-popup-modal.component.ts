@@ -32,7 +32,7 @@ export class ManagedDatapointsPopupModalComponent implements OnInit {
 
   public onSave$: Subject<DatapointPopup[]> = new Subject<DatapointPopup[]>();
 
-  formGroup?: FormGroup;
+  formGroup!: FormGroup;
 
   constructor(private modalRef: BsModalRef, private formBuilder: FormBuilder) {}
 

@@ -6,7 +6,8 @@ import {
 } from "../../../../models/data-point-indoor-map.model";
 import { IIdentified } from "@c8y/client";
 import { BsModalRef } from "ngx-bootstrap/modal";
-import { AssetSelectionChangeEvent } from "@c8y/ngx-components/assets-navigator";
+import { AssetSelectionChangeEvent, GroupNodeService } from "@c8y/ngx-components/assets-navigator";
+import { MAX_PAGE_SIZE } from "@c8y/ngx-components";
 
 @Component({
   selector: "assign-devices-modal",
@@ -25,15 +26,21 @@ export class AssignDevicesModalComponent implements OnInit {
     groupsOnly: false,
     multi: true,
     required: false,
-    search: false,
+    search: true,
     showChildDevices: true,
     showUnassignedDevices: false,
     label: "Assign Devices to Floor Plan",
   };
 
-  constructor(private bsModalRef: BsModalRef) {}
+  constructor(
+    private bsModalRef: BsModalRef,
+    private groupNodeService: GroupNodeService
+  ) {}
 
   ngOnInit() {
+    // Increase the page size to show more elements (default is usually 20)
+    (this.groupNodeService as any).PAGE_SIZE = 100;
+    
     if (this.building?.levels?.length > 0) {
       this.selectLevel(this.building.levels[0]);
     }
