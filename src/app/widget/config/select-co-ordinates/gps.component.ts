@@ -19,13 +19,11 @@ import { GPSCoordinates } from "../../../models/data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
 import { InventoryBinaryService } from "@c8y/client";
 
-// Define the required control point structure for the rotated plugin
 interface ControlPoints {
-  tl: L.LatLngExpression;
-  tr: L.LatLngExpression;
-  bl: L.LatLngExpression;
+  tl: L.LatLng;
+  tr: L.LatLng;
+  bl: L.LatLng;
 }
-
 @Component({
   selector: "c8y-gps-component",
   templateUrl: "./gps.component.html",
@@ -206,7 +204,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.map.addLayer(this.featureGroup);
     }
 
-    // --- GEOMAN CONTROL SETUP ---
     mapWithPm.pm.addControls({
       position: "topleft",
       drawMarker: false,
@@ -216,33 +213,35 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       drawRectangle: true,
       drawPolygon: false,
       drawText: false,
-      editMode: true, // Set to true to make the Edit button available
+      editMode: true,
       dragMode: true,
+      rotateMode: true,
       cutPolygon: false,
       deleteMode: true,
-      rotateMode: true,
-      allowSelfIntersection: false,
-      edit: {
-        featureGroup: this.featureGroup,
-      },
     });
 
-    // --- 1. pm:create Handler (User draws a NEW shape) ---
+    // Global options to maintain "Rectangle" identity and rotation support
+    mapWithPm.pm.setGlobalOptions({
+      rectangleEditable: true,
+      snappable: true,
+      // Use the current rotation angle for new rectangles
+      //rectangleAngle: this.rotationAngle,
+    });
+
     mapWithPm.on("pm:create", (e: any) => {
       const layer = e.layer;
-
-      // Clear existing layers so we only have one boundary
       this.featureGroup?.clearLayers();
       this.featureGroup?.addLayer(layer);
 
-      // Enable interaction and attach listeners immediately
-      this.enableLayerInteraction(layer);
+      // Explicitly tag as Rectangle to prevent vertex skewing
+      if (layer.pm) {
+        layer.pm._type = "Rectangle";
+      }
 
-      // Initial update
+      this.enableLayerInteraction(layer);
       this.handleLayerUpdate(layer);
     });
 
-    // --- 2. pm:remove Handler ---
     mapWithPm.on("pm:remove", (e: any) => {
       this.imageBounds.set({ tl: { lat: 0, lng: 0 }, br: { lat: 0, lng: 0 } });
       this.polygonVertices.set(null);
@@ -250,56 +249,127 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.updateImageOverlayPosition();
       this.emitConfigChange(this.imageBounds());
     });
-
-    // NOTE: Removed map-level listeners for pm:edit, pm:dragend, pm:rotateend
-    // since they are now handled directly on the layer in enableLayerInteraction
-    // for reliability.
   }
 
-  // Helper to centralize update logic
-  private handleLayerUpdate(layer: any) {
-    if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
-      // Get the current AABB of the drawn shape (required for imageBounds state)
-      this.updateImageBoundsFromLeaflet(layer.getBounds());
+  private drawSavedBoundary(bounds: {
+    tl: { lat: number; lng: number };
+    br: { lat: number; lng: number };
+  }): void {
+    if (
+      !this.map ||
+      !this.featureGroup ||
+      this.featureGroup.getLayers().length > 0
+    )
+      return;
 
-      // Always capture the actual vertices (polygon vertices for rotated/skewed shapes)
-      this.polygonVertices.set(layer.getLatLngs() as L.LatLng[][]);
-    } else {
-      this.polygonVertices.set(null);
+    const vertices = this.polygonVertices();
+    let layerToDraw: L.Rectangle | undefined;
+
+    if (vertices && vertices[0] && vertices[0].length >= 4) {
+      const ring = vertices[0];
+      // Create base rectangle from stored bounds
+      const rectBounds = L.latLngBounds(ring[0], ring[2]);
+
+      layerToDraw = L.rectangle(rectBounds, {
+        color: "#ff0000",
+        weight: 1,
+        dashArray: "5, 5",
+        fillOpacity: 0.1,
+      });
+
+      // Restore the tilted coordinates immediately
+      layerToDraw.setLatLngs(vertices);
+
+      // Tell Geoman this rectangle is rotated so the Edit handles align
+      if ((layerToDraw as any).pm) {
+        (layerToDraw as any).pm.setInitAngle(this.rotationAngle);
+      }
     }
 
+    if (layerToDraw) {
+      this.featureGroup.addLayer(layerToDraw);
+      setTimeout(() => {
+        this.enableLayerInteraction(layerToDraw);
+      }, 100);
+    }
+  }
+
+  private getOverlayControlPoints(): ControlPoints {
+    const vertices = this.polygonVertices();
+    const bounds = this.imageBounds();
+
+    if (vertices && vertices[0] && vertices[0].length >= 4) {
+      const ring: L.LatLng[] = vertices[0];
+
+      // 1. Sort points by Latitude (descending) to find the "top" two vertices
+      const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
+      const topTwo = [sortedByLat[0], sortedByLat[1]];
+
+      // 2. Of those top two, the one with the smaller Longitude is the Top-Left (TL)
+      // The other is the Top-Right (TR)
+      const tl = topTwo[0].lng < topTwo[1].lng ? topTwo[0] : topTwo[1];
+      const tr = topTwo[0].lng < topTwo[1].lng ? topTwo[1] : topTwo[0];
+
+      // 3. Find the Bottom-Left (BL): The point that is NOT TL or TR and is further "West"
+      const remaining = ring.filter((p) => p !== tl && p !== tr);
+      const bl =
+        remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
+
+      return {
+        tl: L.latLng(tl.lat, tl.lng),
+        tr: L.latLng(tr.lat, tr.lng),
+        bl: L.latLng(bl.lat, bl.lng),
+      };
+    }
+
+    // Fallback for AABB
+    return {
+      tl: L.latLng(bounds.tl.lat, bounds.tl.lng),
+      tr: L.latLng(bounds.tl.lat, bounds.br.lng),
+      bl: L.latLng(bounds.br.lat, bounds.tl.lng),
+    };
+  }
+
+  private handleLayerUpdate(layer: any) {
+    if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
+      // 1. Capture the upright bounding box for standard metadata
+      this.updateImageBoundsFromLeaflet(layer.getBounds());
+
+      // 2. Capture the actual skewed/rotated vertices
+      let latLngs = layer.getLatLngs();
+
+      // Normalize to LatLng[][] so it matches the expected signal type
+      const normalizedVertices = Array.isArray(latLngs[0])
+        ? latLngs
+        : [latLngs];
+      this.polygonVertices.set(normalizedVertices as L.LatLng[][]);
+    }
+
+    // 3. Force the image overlay to reposition using the new vertices
     this.updateImageOverlayPosition();
     this.emitConfigChange(this.imageBounds());
   }
 
-  // Helper to enable PM on a layer
   private enableLayerInteraction(layer: any) {
     if (layer.pm) {
-      // 1. Enable Geoman modes
       layer.pm.enable({
         allowSelfIntersection: false,
-      });
-      // Ensure drag is also explicitly enabled
-      (layer as any).pm.enableLayerDrag();
-
-      // **FIX:** Add listeners directly to the layer for reliable event capturing
-      layer.on("pm:dragend", () => {
-        console.log("Layer pm:dragend triggered.");
-        this.handleLayerUpdate(layer);
+        rectangleEditable: true,
       });
 
-      layer.on("pm:edit", () => {
-        console.log("Layer pm:edit triggered.");
+      layer.off("pm:edit pm:dragend pm:rotateend"); // Clear old to prevent duplicates
+
+      layer.on("pm:edit pm:dragend", () => {
         this.handleLayerUpdate(layer);
       });
 
       layer.on("pm:rotateend", (e: any) => {
-        console.log("Layer pm:rotateend triggered.");
         this.rotationAngle = e.angle || 0;
         this.handleLayerUpdate(layer);
       });
     }
   }
+
   private updateImageBoundsFromLeaflet(bounds: L.LatLngBounds): void {
     const tl = bounds.getNorthWest(); // Top-Left (North-West)
     const br = bounds.getSouthEast(); // Bottom-Right (South-East)
@@ -308,32 +378,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       tl: { lat: tl.lat, lng: tl.lng },
       br: { lat: br.lat, lng: br.lng },
     });
-  }
-
-  private getOverlayControlPoints(): ControlPoints {
-    const vertices = this.polygonVertices();
-    const bounds = this.imageBounds();
-
-    // 1. Use Polygon Vertices (preferred for rotation/skew)
-    if (vertices) {
-      const ring = vertices[0];
-
-      if (ring.length >= 4) {
-        // Geoman points are stored sequentially: TL, TR, BR, BL
-        const tl = ring[0];
-        const tr = ring[1];
-        const bl = ring[3];
-
-        return { tl, tr, bl };
-      }
-    }
-
-    // 2. Fallback: Axis-aligned bounding box corners (no rotation)
-    const tl = L.latLng(bounds.tl.lat, bounds.tl.lng);
-    const tr = L.latLng(bounds.tl.lat, bounds.br.lng);
-    const bl = L.latLng(bounds.br.lat, bounds.tl.lng); // South-West point
-
-    return { tl, tr, bl };
   }
 
   private getImageBounds(): L.LatLngBounds {
@@ -457,66 +501,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       bottomRightLng: bounds.br.lng,
       polygonVerticesJson: polygonVerticesJson,
     };
-  }
-
-  private drawSavedBoundary(bounds: {
-    tl: { lat: number; lng: number };
-    br: { lat: number; lng: number };
-  }): void {
-    if (!this.map || !this.featureGroup) return;
-
-    // Only draw if the feature group is empty to prevent duplication on signal change
-    if (this.featureGroup.getLayers().length > 0) {
-      // If a layer already exists, ensure its listeners are correctly attached
-      const existingLayer = this.featureGroup.getLayers()[0];
-      if (existingLayer) {
-        this.enableLayerInteraction(existingLayer);
-      }
-      return;
-    }
-
-    let layerToDraw: L.Layer | undefined;
-    let leafletBounds: L.LatLngBounds | undefined;
-
-    const vertices = this.polygonVertices();
-    if (vertices) {
-      layerToDraw = L.polygon(vertices, {
-        color: "#ff0000",
-        weight: 1,
-        dashArray: "5, 5",
-        fillOpacity: 0.1,
-      });
-      // Use the actual bounds of the polygon (for centering, etc.)
-      leafletBounds = (layerToDraw as L.Polygon).getBounds();
-    } else if (bounds.tl.lat !== 0) {
-      // Use standard rectangle if only AABB is saved
-      const southWest = L.latLng(bounds.br.lat, bounds.tl.lng);
-      const northEast = L.latLng(bounds.tl.lat, bounds.br.lng);
-      leafletBounds = L.latLngBounds(southWest, northEast);
-
-      layerToDraw = L.rectangle(leafletBounds, {
-        color: "#ff0000",
-        weight: 1,
-        dashArray: "5, 5",
-        fillOpacity: 0.1,
-      });
-    } else {
-      return;
-    }
-
-    if (layerToDraw) {
-      this.featureGroup.addLayer(layerToDraw);
-
-      if (this.rotationAngle !== 0 && (layerToDraw as any).setRotation) {
-        (layerToDraw as any).setRotation(this.rotationAngle);
-      }
-
-      // **FIX: Use setTimeout to ensure the layer is fully added and rendered**
-      // **before enabling Geoman interaction and attaching layer-specific listeners.**
-      setTimeout(() => {
-        this.enableLayerInteraction(layerToDraw);
-      }, 50);
-    }
   }
 
   ngOnDestroy(): void {
