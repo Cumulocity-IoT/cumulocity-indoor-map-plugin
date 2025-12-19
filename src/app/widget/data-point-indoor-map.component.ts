@@ -11,7 +11,9 @@ import {
   ViewChild,
   ViewEncapsulation,
 } from "@angular/core";
+import { Router, ActivatedRoute } from "@angular/router";
 import { IManagedObject } from "@c8y/client";
+import { AlertService } from "@c8y/ngx-components";
 import {
   MapConfiguration,
   MapConfigurationLevel,
@@ -95,6 +97,7 @@ export class DataPointIndoorMapComponent
   private loadedZones: any[] = [];
   private isolatedLayer: L.Layer | null = null;
   public isZoneIsolated: boolean = false;
+  private isolatedZoneId: string | null = null; // Track isolated zone for URL sharing
 
   destroy$ = new EventEmitter<void>();
 
@@ -110,12 +113,25 @@ export class DataPointIndoorMapComponent
     private buildingService: BuildingService,
     private imageRotateService: ImageRotateService,
     private modalService: BsModalService,
-    private cd: ChangeDetectorRef // 1. OPTIMIZATION: Inject ChangeDetectorRef
+    private cd: ChangeDetectorRef, // 1. OPTIMIZATION: Inject ChangeDetectorRef
+    private router: Router,
+    private activatedRoute: ActivatedRoute,
+    private alertService: AlertService
   ) {}
 
   async ngOnInit() {
     this.leaf = await import("leaflet");
     this.imageRotateService.initialize(this.leaf);
+    
+    // Read URL parameters and set initial filter state
+    this.readUrlParameters();
+    
+    // Subscribe to URL parameter changes (for browser back/forward navigation)
+    this.activatedRoute.queryParams
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(params => {
+        this.applyUrlParameters(params);
+      });
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -441,6 +457,7 @@ export class DataPointIndoorMapComponent
   public restoreZoneView(): void {
     if (!this.map) return;
     this.isZoneIsolated = false;
+    this.isolatedZoneId = null;
     if (this.isolatedLayer) {
       this.map.removeLayer(this.isolatedLayer);
       this.isolatedLayer = null;
@@ -478,6 +495,12 @@ export class DataPointIndoorMapComponent
     if (!this.showZones || !this.loadedZones.length) {
       this.isolatedLayer = null;
       this.isZoneIsolated = false;
+      return;
+    }
+
+    // Apply isolated zone from URL if specified
+    if (this.isolatedZoneId && !this.isZoneIsolated) {
+      this.applyIsolatedZoneFromUrl();
       return;
     }
 
@@ -523,6 +546,8 @@ export class DataPointIndoorMapComponent
             const bounds = clickedLayer.getBounds();
             this.isolatedLayer = clickedLayer;
             this.isZoneIsolated = true;
+            // Store zone ID for URL sharing
+            this.isolatedZoneId = zone.id || zone.properties?.id || `zone_${this.loadedZones.indexOf(zone)}`;
             clickedLayer.addTo(mapInstance);
             mapInstance.invalidateSize(true);
             mapInstance.fitBounds(bounds, {
@@ -1398,5 +1423,211 @@ export class DataPointIndoorMapComponent
     const uniqueTypes = [...new Set(types)].sort(); // Get unique types and sort them
 
     return uniqueTypes;
+  }
+
+  /**
+   * Read URL parameters and set initial filter state
+   */
+  private readUrlParameters(): void {
+    const params = this.activatedRoute.snapshot.queryParams;
+    this.applyUrlParameters(params);
+  }
+
+  /**
+   * Apply URL parameters to component state
+   */
+  private applyUrlParameters(params: any): void {
+    // Apply search string from URL
+    if (params['search']) {
+      this.searchString = params['search'];
+    }
+    
+    // Apply selected type from URL
+    if (params['type']) {
+      this.selectedType = params['type'];
+    }
+    
+    // Apply floor level from URL
+    if (params['floor'] !== undefined) {
+      const floorLevel = parseInt(params['floor'], 10);
+      if (!isNaN(floorLevel) && floorLevel >= 0) {
+        this.currentFloorLevel = floorLevel;
+      }
+    }
+    
+    // Apply zone configuration from URL
+    if (params['zones'] === 'true') {
+      this.showZones = true;
+    } else if (params['zones'] === 'false') {
+      this.showZones = false;
+    }
+    
+    // Apply isolated zone from URL
+    if (params['isolatedZone']) {
+      this.isolatedZoneId = params['isolatedZone'];
+      // Note: Zone isolation will be applied after zones are loaded in renderZones
+    }
+  }
+
+  /**
+   * Get a shareable URL with current filter configuration
+   */
+  public getShareableUrl(): string {
+    const queryParams: any = {};
+    
+    if (this.searchString && this.searchString.trim()) {
+      queryParams['search'] = this.searchString.trim();
+    }
+    
+    if (this.selectedType) {
+      queryParams['type'] = this.selectedType;
+    }
+    
+    if (this.currentFloorLevel !== 0) {
+      queryParams['floor'] = this.currentFloorLevel;
+    }
+    
+    // Include zone configuration
+    if (this.showZones) {
+      queryParams['zones'] = 'true';
+    }
+    
+    if (this.isZoneIsolated && this.isolatedZoneId) {
+      queryParams['isolatedZone'] = this.isolatedZoneId;
+    }
+    
+    const urlTree = this.router.createUrlTree([], {
+      relativeTo: this.activatedRoute,
+      queryParams: queryParams
+    });
+    
+    return window.location.origin + this.router.serializeUrl(urlTree);
+  }
+
+  /**
+   * Share button click handler - updates URL and copies to clipboard with notification
+   */
+  public onShareConfiguration(): void {
+    // Update URL with current configuration
+    this.updateUrlParameters();
+    
+    // Get the shareable URL
+    const shareableUrl = this.getShareableUrl();
+    
+    // Try to copy to clipboard if supported
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(shareableUrl).then(() => {
+        this.alertService.success('Configuration URL copied to clipboard!');
+      }).catch(err => {
+        console.warn('Failed to copy to clipboard:', err);
+        this.fallbackCopyToClipboard(shareableUrl);
+      });
+    } else {
+      this.fallbackCopyToClipboard(shareableUrl);
+    }
+  }
+
+  /**
+   * Fallback method to copy URL to clipboard for older browsers
+   */
+  private fallbackCopyToClipboard(text: string): void {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        this.alertService.success('Configuration URL copied to clipboard!');
+      } else {
+        this.alertService.warning('Please copy the URL manually: ' + text);
+      }
+    } catch (err) {
+      console.warn('Fallback copy failed:', err);
+      this.alertService.warning('Please copy the URL manually: ' + text);
+    }
+    
+    document.body.removeChild(textArea);
+  }
+
+  /**
+   * Update URL parameters to reflect current filter state (manual trigger only)
+   */
+  private updateUrlParameters(): void {
+    const queryParams: any = {};
+    
+    // Add search string to URL if not empty
+    if (this.searchString && this.searchString.trim()) {
+      queryParams['search'] = this.searchString.trim();
+    }
+    
+    // Add selected type to URL if not empty
+    if (this.selectedType) {
+      queryParams['type'] = this.selectedType;
+    }
+    
+    // Add floor level to URL if not default (0)
+    if (this.currentFloorLevel !== 0) {
+      queryParams['floor'] = this.currentFloorLevel;
+    }
+    
+    // Add zone configuration
+    if (this.showZones) {
+      queryParams['zones'] = 'true';
+    }
+    
+    if (this.isZoneIsolated && this.isolatedZoneId) {
+      queryParams['isolatedZone'] = this.isolatedZoneId;
+    }
+    
+    // Update URL without triggering navigation
+    this.router.navigate([], {
+      relativeTo: this.activatedRoute,
+      queryParams: queryParams,
+      queryParamsHandling: 'replace', // Replace current query params
+      replaceUrl: true // Don't add to browser history
+    });
+  }
+
+  /**
+   * Apply isolated zone from URL parameters after zones are loaded
+   */
+  private applyIsolatedZoneFromUrl(): void {
+    if (this.isolatedZoneId && this.loadedZones.length > 0 && this.map) {
+      const targetZone = this.loadedZones.find(zone => {
+        return zone.id === this.isolatedZoneId || 
+               zone.properties?.id === this.isolatedZoneId ||
+               `zone_${this.loadedZones.indexOf(zone)}` === this.isolatedZoneId;
+      });
+      
+      if (targetZone && targetZone.geometry) {
+        const layer = this.leaf.geoJSON(targetZone.geometry);
+        layer.eachLayer((vectorLayer) => {
+          if (vectorLayer instanceof this.leaf.Path) {
+            (vectorLayer as any).setStyle({
+              color: "#0000FF",
+              weight: 3,
+              fillOpacity: 0.3,
+            });
+          }
+          
+          if ((vectorLayer as any).getBounds && (vectorLayer as any).getBounds().isValid()) {
+            this.zonesFeatureGroup!.clearLayers();
+            this.isolatedLayer = vectorLayer;
+            this.isZoneIsolated = true;
+            vectorLayer.addTo(this.map!);
+            this.map!.invalidateSize(true);
+            this.map!.fitBounds((vectorLayer as any).getBounds(), {
+              padding: [50, 50],
+            });
+          }
+        });
+      }
+    }
   }
 }
