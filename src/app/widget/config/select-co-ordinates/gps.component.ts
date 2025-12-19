@@ -323,24 +323,46 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     if (vertices && vertices[0] && vertices[0].length >= 4) {
       const ring: L.LatLng[] = vertices[0];
 
-      // 1. Sort points by Latitude (descending) to find the "top" two vertices
-      const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
-      const topTwo = [sortedByLat[0], sortedByLat[1]];
+      // For rotated rectangles, we need to identify the corners based on their 
+      // relationship to the center and the rotation angle, not just lat/lng values
+      const center = this.calculatePolygonCenter(ring);
+      
+      // Calculate each point's angle relative to the center
+      const pointsWithAngles = ring.map(point => ({
+        point,
+        angle: this.calculateAngleFromCenter(center, point)
+      }));
 
-      // 2. Of those top two, the one with the smaller Longitude is the Top-Left (TL)
-      // The other is the Top-Right (TR)
-      const tl = topTwo[0].lng < topTwo[1].lng ? topTwo[0] : topTwo[1];
-      const tr = topTwo[0].lng < topTwo[1].lng ? topTwo[1] : topTwo[0];
+      // Sort by angle to get points in a consistent order
+      pointsWithAngles.sort((a, b) => a.angle - b.angle);
 
-      // 3. Find the Bottom-Left (BL): The point that is NOT TL or TR and is further "West"
-      const remaining = ring.filter((p) => p !== tl && p !== tr);
-      const bl =
-        remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
+      // The rotation angle affects which physical corner corresponds to which logical corner
+      // Normalize rotation angle to 0-360 degrees
+      const normalizedRotation = ((this.rotationAngle % 360) + 360) % 360;
+      
+      // Determine the starting index based on rotation
+      // This ensures we always identify the correct logical corners regardless of rotation
+      let startIndex = 0;
+      if (normalizedRotation >= 45 && normalizedRotation < 135) {
+        startIndex = 3; // 90° rotation
+      } else if (normalizedRotation >= 135 && normalizedRotation < 225) {
+        startIndex = 2; // 180° rotation  
+      } else if (normalizedRotation >= 225 && normalizedRotation < 315) {
+        startIndex = 1; // 270° rotation
+      }
+
+      // Extract the corners in the correct order: TL, TR, BR, BL
+      const orderedPoints = [
+        pointsWithAngles[(startIndex + 0) % 4].point, // Top-Left
+        pointsWithAngles[(startIndex + 1) % 4].point, // Top-Right
+        pointsWithAngles[(startIndex + 2) % 4].point, // Bottom-Right
+        pointsWithAngles[(startIndex + 3) % 4].point  // Bottom-Left
+      ];
 
       return {
-        tl: L.latLng(tl.lat, tl.lng),
-        tr: L.latLng(tr.lat, tr.lng),
-        bl: L.latLng(bl.lat, bl.lng),
+        tl: L.latLng(orderedPoints[0].lat, orderedPoints[0].lng),
+        tr: L.latLng(orderedPoints[1].lat, orderedPoints[1].lng),
+        bl: L.latLng(orderedPoints[3].lat, orderedPoints[3].lng),
       };
     }
 
@@ -432,6 +454,40 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       (await this.binaryService.download(imageId)) as Response
     ).blob();
     return this.imageBlob;
+  }
+
+  /**
+   * Calculate the center point of a polygon
+   */
+  private calculatePolygonCenter(points: L.LatLng[]): L.LatLng {
+    let totalLat = 0;
+    let totalLng = 0;
+    
+    for (const point of points) {
+      totalLat += point.lat;
+      totalLng += point.lng;
+    }
+    
+    return L.latLng(totalLat / points.length, totalLng / points.length);
+  }
+
+  /**
+   * Calculate the angle in degrees from center to a point
+   * Returns angle in range [0, 360)
+   */
+  private calculateAngleFromCenter(center: L.LatLng, point: L.LatLng): number {
+    const deltaY = point.lat - center.lat;
+    const deltaX = point.lng - center.lng;
+    
+    // Calculate angle in radians, then convert to degrees
+    let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+    
+    // Normalize to 0-360 range
+    if (angle < 0) {
+      angle += 360;
+    }
+    
+    return angle;
   }
 
   private updateImageOverlayPosition(): void {
