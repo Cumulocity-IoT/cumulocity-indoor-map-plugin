@@ -8,6 +8,8 @@ import {
   Input,
   OnDestroy,
   OnInit,
+  OnChanges,
+  SimpleChanges,
   ViewChild,
   ViewEncapsulation,
 } from "@angular/core";
@@ -44,7 +46,7 @@ import { LeafletPopupActionModalComponent } from "./shared/components/leaflet-po
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataPointIndoorMapComponent
-  implements OnInit, AfterViewInit, OnDestroy
+  implements OnInit, AfterViewInit, OnDestroy, OnChanges
 {
   @Input() config!: WidgetConfiguration;
   @ViewChild("IndoorDataPointMap", { read: ElementRef, static: true })
@@ -119,6 +121,12 @@ export class DataPointIndoorMapComponent
     private alertService: AlertService
   ) {}
 
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['config'] && changes['config'].currentValue) {
+      // Config has changed, trigger any necessary updates
+    }
+  }
+
   async ngOnInit() {
     this.leaf = await import("leaflet");
     this.imageRotateService.initialize(this.leaf);
@@ -136,7 +144,6 @@ export class DataPointIndoorMapComponent
 
   async ngAfterViewInit(): Promise<void> {
     this.isLoading$.next(true);
-    console.log("ngAfterViewInit: Loading map data...");
     this.cd.detectChanges(); // Trigger change detection to show loading indicator
 
     if (this.config?.buildingId) {
@@ -689,7 +696,6 @@ export class DataPointIndoorMapComponent
 
   public toggleZoneVisibility(): void {
     if (!this.map) return;
-    console.log(this.isolatedLayer);
     if (this.isolatedLayer) {
       // If the isolated layer is clicked again, restore the full view.
       this.restoreZoneView();
@@ -797,7 +803,6 @@ export class DataPointIndoorMapComponent
 
     let markerCreationCount = 0;
     allMarkerManagedObjects.forEach((markerManagedObject) => {
-      console.log("Processing markerManagedObject:", markerManagedObject);
       if (
         !markerManagedObject["c8y_Position"] ||
         markerManagedObject["c8y_Position"].lat == null ||
@@ -1266,39 +1271,24 @@ export class DataPointIndoorMapComponent
    */
   public highlightRow(row: Row): void {
 
-    console.log('Highlighting row:', row);
-
     if (!this.map || !row) {
-      console.log('No map or no row');
       return;
     }
 
     // The device data is directly in the row object, not in row.item
     const deviceId = row.id || row['item']?.id;
-    console.log('Looking for device ID:', deviceId);
-    console.log('Current floor level:', this.currentFloorLevel);
-    console.log('Available markers:', Object.keys(this.markerManagedObjectsForFloorLevel[this.currentFloorLevel] || {}));
     
     const markerManagedObject = this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]?.[deviceId];
     
     if (!markerManagedObject) {
-      console.warn('Marker not found for device:', deviceId);
-      console.warn('Available devices on this level:', this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]);
       return;
     }
-
-    console.log('Found marker managed object:', markerManagedObject);
 
     const markerInstance = markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] as L.Marker | L.CircleMarker;
     
     if (!markerInstance) {
-      console.warn('Marker instance not found for device:', deviceId);
-      console.warn('KEY_MAP_MARKER_INSTANCE:', this.KEY_MAP_MARKER_INSTANCE);
-      console.warn('Available keys in markerManagedObject:', Object.keys(markerManagedObject));
       return;
     }
-
-    console.log('Found marker instance:', markerInstance);
 
     // Clear previous highlight
     this.clearMarkerHighlight();
@@ -1308,9 +1298,6 @@ export class DataPointIndoorMapComponent
 
     // Get marker position
     const position = markerInstance.getLatLng();
-    console.log('Marker position:', position);
-    console.log('Current map center:', this.map.getCenter());
-    console.log('Current map zoom:', this.map.getZoom());
 
     // Apply highlight styling
     this.applyMarkerHighlight(markerInstance);
@@ -1318,8 +1305,6 @@ export class DataPointIndoorMapComponent
     // Pan and zoom to the marker with fixed zoom level
     const currentZoom = this.map.getZoom();
     const targetZoom = 18; // Fixed zoom level to prevent continuous zooming
-    
-    console.log('Current zoom:', currentZoom, 'Target zoom:', targetZoom);
     
     // Use flyTo for smooth combined pan and zoom
     this.map.flyTo(position, targetZoom, {
@@ -1338,12 +1323,9 @@ export class DataPointIndoorMapComponent
    * Applies highlight styling to a marker
    */
   private applyMarkerHighlight(marker: L.Marker | L.CircleMarker): void {
-    console.log('Applying highlight to marker:', marker);
-    console.log('useIcons setting:', this.useIcons);
     
     // Check if it's a circle marker by checking if it has setStyle method
     if (marker && typeof (marker as any).setStyle === 'function') {
-      console.log('Highlighting circle marker');
       // Store original style for circle markers
       this.originalMarkerStyle = {
         color: (marker as any).options.color,
@@ -1358,15 +1340,12 @@ export class DataPointIndoorMapComponent
         fillOpacity: 1.0
       });
     } else {
-      console.log('Highlighting icon marker');
       // For icon markers, add border highlight effect
       const markerElement = marker.getElement();
-      console.log('Marker element:', markerElement);
       
       if (markerElement) {
         markerElement.classList.add('marker-highlighted');
         markerElement.classList.add('marker-clicked-highlight');
-        console.log('Added marker highlight classes');
       
       }
     }
@@ -1379,8 +1358,6 @@ export class DataPointIndoorMapComponent
     if (!this.highlightedMarker) {
       return;
     }
-
-    console.log('Clearing highlight from marker:', this.highlightedMarker);
 
     // Check if it's a circle marker by checking if it has setStyle method
     if (typeof (this.highlightedMarker as any).setStyle === 'function' && this.originalMarkerStyle) {

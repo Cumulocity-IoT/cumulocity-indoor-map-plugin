@@ -27,6 +27,7 @@ import { TypeaheadModule } from "ngx-bootstrap/typeahead";
 import { FloorConfigModalComponent } from "./config/floor-configuration-modal/floor-config-modal.component";
 import { MapDataGridComponent } from "./shared/components/map-data-grid/map-data-grid.component";
 import { PSAutoRefreshComponent } from "./auto-refresh/ps-auto-refresh.component";
+import { ColumnConfigModalComponent } from "./config/column-config-modal/column-config-modal.component";
 
 @NgModule({
   declarations: [
@@ -36,6 +37,7 @@ import { PSAutoRefreshComponent } from "./auto-refresh/ps-auto-refresh.component
     AssignDevicesModalComponent,
     AssignLocationModalComponent,
     FloorConfigModalComponent,
+    ColumnConfigModalComponent,
     GPSComponent,
     ZonesComponent,
   ],

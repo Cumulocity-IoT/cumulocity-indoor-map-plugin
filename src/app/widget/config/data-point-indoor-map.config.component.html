@@ -125,6 +125,23 @@
       </button>
     </c8y-form-group>
 
+    <c8y-form-group>
+      <label>Configure Data Grid Columns</label>
+      <p class="small">
+        Customize which columns appear in the data grid and their order.
+      </p>
+      <button
+        type="button"
+        class="btn btn-default btn-block"
+        (click)="openColumnConfigModal()"
+      >
+        <i c8yIcon="table" class="c8y-icon"></i> Configure Columns
+        <span *ngIf="config?.columnConfig?.length > 0" class="text-success pull-right" title="{{config.columnConfig.length}} columns configured">
+          <i c8yIcon="check-circle"></i>
+        </span>
+      </button>
+    </c8y-form-group>
+
     <!--  <c8y-form-group>
       <label>Configure Marker</label>
       <p class="small">

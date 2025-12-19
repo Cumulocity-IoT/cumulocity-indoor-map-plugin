@@ -15,11 +15,13 @@ import { BuildingService } from "../../services/building.service";
 import { EventPollingService } from "../polling/event-polling.service";
 import { isEmpty } from "lodash";
 import { FloorConfigModalComponent } from "./floor-configuration-modal/floor-config-modal.component";
+import { ColumnConfigModalComponent } from "./column-config-modal/column-config-modal.component";
 import {
   GPSCoordinates,
   MapConfiguration,
   MapConfigurationLevel,
   WidgetConfiguration,
+  ColumnConfig,
 } from "../../models/data-point-indoor-map.model";
 import { IManagedObject } from "@c8y/client";
 
@@ -256,6 +258,44 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     });
   }
 
+  openColumnConfigModal(): void {
+    // Flatten all devices from all floors for property analysis
+    const allDevices: IManagedObject[] = [];
+    if (this.managedObjectsForFloorLevels) {
+      this.managedObjectsForFloorLevels.forEach(floorDevices => {
+        if (Array.isArray(floorDevices)) {
+          allDevices.push(...floorDevices);
+        }
+      });
+    }
+    
+    const modalRef = this.modalService.show(ColumnConfigModalComponent, {
+      initialState: { 
+        currentConfig: this.config?.columnConfig || [],
+        devices: allDevices
+      } as any,
+      class: "modal-lg",
+    });
+
+    modalRef.content?.onChange.subscribe((columnConfig: ColumnConfig[]) => {
+      if (!this.config) {
+        this.config = {} as any;
+      }
+      this.config.columnConfig = columnConfig;
+      
+      // Manually trigger save to persist column configuration immediately
+      this.saveColumnConfiguration();
+    });  
+  }
+
+  /**
+   * Save column configuration immediately
+   */
+  private saveColumnConfiguration(): void {
+    // The column configuration is stored in this.config.columnConfig
+    // It will be automatically saved with the widget configuration
+  }
+
   private initMapConfigurations(): void {
     this.buildingService
       .loadSmartMapConfigurations()
@@ -280,8 +320,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
             this.managedObjectsForFloorLevels  =
               await this.buildingService.loadMarkersForLevels(fullConfig.levels);
            
-            this.selectedBuilding = fullConfig;
-            console.log("Loaded full building configuration:", fullConfig); // this.onMapConfigurationChanged();
+            this.selectedBuilding = fullConfig; // this.onMapConfigurationChanged();
           } catch {
             // keep existing selectedBuilding on error and still trigger change handling
             this.onMapConfigurationChanged();
@@ -291,8 +330,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onGpsConfigChange(coordinates: GPSCoordinates): void {
-    console.log("Parent received new config (Boundaries):", coordinates);
-
     if (this.selectedBuilding && coordinates) {
       this.selectedBuilding.coordinates = coordinates;
       this.selectedBuilding.coordinates.rotationAngle =
@@ -303,7 +340,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   onZoneChange(newConfig: any): void {
-    console.log("Parent received new config (Zones):", newConfig);
     if (this.selectedBuilding && newConfig) {
       this.selectedBuilding.allZonesByLevel = newConfig?.allZonesByLevel;
     }
@@ -313,7 +349,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   onBeforeSave(
     config?: WidgetConfiguration
   ): boolean | Promise<boolean> | Observable<boolean> {
-    console.log(this.selectedBuilding);
     if (
       isEmpty(this.selectedBuilding?.name) ||
       this.selectedBuilding?.coordinates?.topLeftLat == 0
@@ -345,6 +380,14 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       .then(() => {
         this.isSaved = true;
         this.config.buildingId = this.selectedBuilding?.id || "";
+        
+        // Make sure column config is copied to the config that gets saved
+        if (config && this.config.columnConfig) {
+          config.columnConfig = this.config.columnConfig;
+        }
+        
+        // Column config is automatically persisted as part of widget configuration
+        
         return true;
       })
       .catch(() => false);

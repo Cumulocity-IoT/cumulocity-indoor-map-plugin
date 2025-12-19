@@ -155,6 +155,7 @@
 
   <map-data-grid
     [devices]="filteredDevicesForGrid"
+    [columnConfig]="config?.columnConfig || []"
     (rowClicked)="highlightRow($event)"
   ></map-data-grid>
 </div>

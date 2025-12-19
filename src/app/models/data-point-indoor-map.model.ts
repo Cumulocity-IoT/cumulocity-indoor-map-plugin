@@ -27,6 +27,7 @@ export interface WidgetConfiguration {
   datapointsPopup?: DatapointPopup[];
   buildingId: string;
   buildingName: string;
+  columnConfig?: ColumnConfig[];
   markerStyle?: {
     useIcons?: boolean;
     defaultIcon?: string;
@@ -51,6 +52,13 @@ export interface DatapointPopup {
 export interface Datapoint {
   fragment: string;
   series: string;
+}
+
+export interface ColumnConfig {
+  key: string;
+  label: string;
+  enabled: boolean;
+  order: number;
 }
 
 export interface Measurement {
