@@ -18,6 +18,7 @@ import "@geoman-io/leaflet-geoman-free";
 import { GPSCoordinates } from "../../../models/data-point-indoor-map.model";
 import { BsModalRef } from "ngx-bootstrap/modal";
 import { InventoryBinaryService } from "@c8y/client";
+import { ImageRotateService } from "../../../services/image-rotate.service";
 
 interface ControlPoints {
   tl: L.LatLng;
@@ -61,7 +62,8 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private bsModalRef: BsModalRef,
-    private binaryService: InventoryBinaryService
+    private binaryService: InventoryBinaryService,
+    private imageRotateService: ImageRotateService
   ) {
     effect(() => {
       const bounds = this.imageBounds();
@@ -79,7 +81,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     // Initialize properties from initialConfig
     const config = this.initialConfig || {};
-
+    this.imageRotateService.initialize(L);
     // Initialize AABB bounds
     this.imageBounds.set({
       tl: {

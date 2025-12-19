@@ -295,24 +295,53 @@ export class DataPointIndoorMapComponent
   private getValidatedControlPoints():
     | { topleft: L.LatLng; topright: L.LatLng; bottomleft: L.LatLng }
     | undefined {
-    // 1. Try to get accurate polygon points first (for rotated images)
-    const polygonPoints = this.getPolygonControlPoints();
-    if (polygonPoints) {
-      return polygonPoints;
-    }
-
-    // 2. Fallback: Use bounding box corners ONLY if polygon data is missing
     const coords = this.building?.coordinates;
     if (!coords) return undefined;
 
+    // 1. Prioritize Polygon vertices (Matches GPS sequential order: TL, TR, BR, BL)
+    if (coords.polygonVerticesJson) {
+      try {
+        const polygonData = JSON.parse(coords.polygonVerticesJson);
+        // Geoman usually returns a nested array [[p1, p2, p3, p4]]
+        const ring = Array.isArray(polygonData[0])
+          ? polygonData[0]
+          : polygonData;
+
+        if (ring && ring.length >= 4) {
+          // Use the same sorting/anchor logic as GPS component to prevent flipping
+          const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
+          const topTwo = [sortedByLat[0], sortedByLat[1]].sort(
+            (a, b) => a.lng - b.lng
+          );
+
+          const tl = topTwo[0];
+          const tr = topTwo[1];
+
+          const remaining = ring.filter(
+            (p: any) =>
+              (p.lat !== tl.lat || p.lng !== tl.lng) &&
+              (p.lat !== tr.lat || p.lng !== tr.lng)
+          );
+          const bl =
+            remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
+
+          return {
+            topleft: this.leaf.latLng(tl.lat, tl.lng),
+            topright: this.leaf.latLng(tr.lat, tr.lng),
+            bottomleft: this.leaf.latLng(bl.lat, bl.lng),
+          };
+        }
+      } catch (e) {
+        console.error("Failed to parse polygonVerticesJson for overlay:", e);
+      }
+    }
+
+    // 2. Fallback: Use the bounding box corners if no tilt is present
     const topLat = coords.topLeftLat ?? 0;
     const leftLng = coords.topLeftLng ?? 0;
     const bottomLat = coords.bottomRightLat ?? 0;
     const rightLng = coords.bottomRightLng ?? 0;
 
-    if (!topLat && !leftLng && !bottomLat && !rightLng) return undefined;
-
-    // Manual mapping for non-rotated rectangles
     return {
       topleft: this.leaf.latLng(topLat, leftLng),
       topright: this.leaf.latLng(topLat, rightLng),
