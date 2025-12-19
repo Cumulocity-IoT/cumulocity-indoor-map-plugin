@@ -27,7 +27,7 @@ export class DeviceSelectorModalComponent implements OnInit {
     showFilter: true,
     showUnassignedDevices: true,
     singleColumn: false,
-    modelMode: "full",
+    modelMode: "full" as const,
     label: "Asset selection",
   };
   model?: IManagedObject;

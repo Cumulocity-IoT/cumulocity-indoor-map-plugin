@@ -136,7 +136,7 @@
         (click)="openColumnConfigModal()"
       >
         <i c8yIcon="table" class="c8y-icon"></i> Configure Columns
-        <span *ngIf="config?.columnConfig?.length > 0" class="text-success pull-right" title="{{config.columnConfig.length}} columns configured">
+        <span *ngIf="config && config.columnConfig && config.columnConfig.length > 0" class="text-success pull-right" [title]="(config.columnConfig?.length || 0) + ' columns configured'">
           <i c8yIcon="check-circle"></i>
         </span>
       </button>
