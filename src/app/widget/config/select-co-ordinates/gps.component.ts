@@ -47,6 +47,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     br: { lat: 0, lng: 0 },
   });
 
+  private tlPoint?: L.LatLng;
+  private trPoint?: L.LatLng;
+  private blPoint?: L.LatLng;
+
   // UI/Config Properties
   public rotationAngle: number = 0;
   public currentZoomLevel: number = 15;
@@ -92,19 +96,32 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       },
     });
 
-    // Initialize Polygon vertices
     if (config.polygonVerticesJson) {
       try {
-        const savedVertices = JSON.parse(config.polygonVerticesJson);
-        const latLngs = savedVertices.map((ring: any[]) =>
+        const parsed = JSON.parse(config.polygonVerticesJson);
+
+        // Normalize data: Ensure it is a nested array LatLng[][]
+        const rawRings = Array.isArray(parsed[0]) ? parsed : [parsed];
+
+        const latLngs = rawRings.map((ring: any[]) =>
           ring.map((v) => L.latLng(v.lat, v.lng))
         );
+
         this.polygonVertices.set(latLngs);
+
+        // CRITICAL: Restore reference points to prevent mirroring on load
+        const ring = latLngs[0];
+        if (ring && ring.length >= 4) {
+          // We restore based on the stable order we used when saving:
+          // Index 0: TL, Index 1: TR, Index 3: BL
+          this.tlPoint = ring[0];
+          this.trPoint = ring[1];
+          this.blPoint = ring[3];
+        }
       } catch (e) {
         console.error("Failed to parse polygon vertices:", e);
       }
     }
-
     // Initialize numeric properties
     this.rotationAngle = config.rotationAngle ?? 0;
     this.currentZoomLevel = Math.floor(
@@ -246,20 +263,15 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     mapWithPm.pm.setGlobalOptions({
       rectangleEditable: true,
       snappable: true,
-      // Use the current rotation angle for new rectangles
-      //rectangleAngle: this.rotationAngle,
     });
 
     mapWithPm.on("pm:create", (e: any) => {
       const layer = e.layer;
+      const latLngs = layer.getLatLngs();
+      const ring = Array.isArray(latLngs[0]) ? latLngs[0] : latLngs;
+
       this.featureGroup?.clearLayers();
       this.featureGroup?.addLayer(layer);
-
-      // Explicitly tag as Rectangle to prevent vertex skewing
-      /*  if (layer.pm) {
-        layer.pm._type = "Rectangle";
-      } */
-
       this.enableLayerInteraction(layer);
       this.handleLayerUpdate(layer);
     });
@@ -269,6 +281,9 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.polygonVertices.set(null);
       this.rotationAngle = 0;
       this.updateImageOverlayPosition();
+      this.tlPoint = undefined;
+      this.trPoint = undefined;
+      this.blPoint = undefined;
       this.emitConfigChange(this.imageBounds());
     });
   }
@@ -318,55 +333,46 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private getOverlayControlPoints(): ControlPoints {
     const vertices = this.polygonVertices();
-    const bounds = this.imageBounds();
-
     if (vertices && vertices[0] && vertices[0].length >= 4) {
-      const ring: L.LatLng[] = vertices[0];
+      const ring = vertices[0];
 
-      // For rotated rectangles, we need to identify the corners based on their 
-      // relationship to the center and the rotation angle, not just lat/lng values
-      const center = this.calculatePolygonCenter(ring);
-      
-      // Calculate each point's angle relative to the center
-      const pointsWithAngles = ring.map(point => ({
-        point,
-        angle: this.calculateAngleFromCenter(center, point)
-      }));
+      // If we haven't tracked points yet, or it's a new draw, find the corners
+      if (!this.tlPoint) {
+        const bounds = L.latLngBounds(ring);
+        const nw = bounds.getNorthWest();
+        const ne = bounds.getNorthEast();
+        const sw = bounds.getSouthWest();
 
-      // Sort by angle to get points in a consistent order
-      pointsWithAngles.sort((a, b) => a.angle - b.angle);
+        const getClosest = (target: L.LatLng) => {
+          return ring.reduce((prev, curr) =>
+            target.distanceTo(curr) < target.distanceTo(prev) ? curr : prev
+          );
+        };
 
-      // The rotation angle affects which physical corner corresponds to which logical corner
-      // Normalize rotation angle to 0-360 degrees
-      const normalizedRotation = ((this.rotationAngle % 360) + 360) % 360;
-      
-      // Determine the starting index based on rotation
-      // This ensures we always identify the correct logical corners regardless of rotation
-      let startIndex = 0;
-      if (normalizedRotation >= 45 && normalizedRotation < 135) {
-        startIndex = 3; // 90° rotation
-      } else if (normalizedRotation >= 135 && normalizedRotation < 225) {
-        startIndex = 2; // 180° rotation  
-      } else if (normalizedRotation >= 225 && normalizedRotation < 315) {
-        startIndex = 1; // 270° rotation
+        this.tlPoint = getClosest(nw);
+        this.trPoint = getClosest(ne);
+        this.blPoint = getClosest(sw);
+      } else {
+        const updateRef = (oldPoint: L.LatLng) => {
+          return ring.reduce((prev, curr) =>
+            oldPoint.distanceTo(curr) < oldPoint.distanceTo(prev) ? curr : prev
+          );
+        };
+
+        if (this.tlPoint) this.tlPoint = updateRef(this.tlPoint);
+        if (this.trPoint) this.trPoint = updateRef(this.trPoint);
+        if (this.blPoint) this.blPoint = updateRef(this.blPoint);
       }
 
-      // Extract the corners in the correct order: TL, TR, BR, BL
-      const orderedPoints = [
-        pointsWithAngles[(startIndex + 0) % 4].point, // Top-Left
-        pointsWithAngles[(startIndex + 1) % 4].point, // Top-Right
-        pointsWithAngles[(startIndex + 2) % 4].point, // Bottom-Right
-        pointsWithAngles[(startIndex + 3) % 4].point  // Bottom-Left
-      ];
-
       return {
-        tl: L.latLng(orderedPoints[0].lat, orderedPoints[0].lng),
-        tr: L.latLng(orderedPoints[1].lat, orderedPoints[1].lng),
-        bl: L.latLng(orderedPoints[3].lat, orderedPoints[3].lng),
+        tl: this.tlPoint!,
+        tr: this.trPoint!,
+        bl: this.blPoint!,
       };
     }
 
     // Fallback for AABB
+    const bounds = this.imageBounds();
     return {
       tl: L.latLng(bounds.tl.lat, bounds.tl.lng),
       tr: L.latLng(bounds.tl.lat, bounds.br.lng),
@@ -401,15 +407,24 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         rectangleEditable: true,
       });
 
-      layer.off("pm:edit pm:dragend pm:rotateend"); // Clear old to prevent duplicates
+      // Use a combined listener for all geometric changes
+      layer.on("pm:change pm:edit pm:rotate pm:dragend", (e: any) => {
+        const latLngs = layer.getLatLngs();
+        const ring = Array.isArray(latLngs[0]) ? latLngs[0] : latLngs;
 
-      layer.on("pm:edit pm:dragend", () => {
+        if (e.angle !== undefined) {
+          this.rotationAngle = e.angle;
+        }
+
+        this.polygonVertices.set([ring] as L.LatLng[][]);
+        // Note: handleLayerUpdate calls updateImageOverlayPosition
         this.handleLayerUpdate(layer);
       });
 
-      layer.on("pm:rotateend", (e: any) => {
-        this.rotationAngle = e.angle || 0;
-        this.handleLayerUpdate(layer);
+      layer.on("pm:create", () => {
+        this.tlPoint = undefined;
+        this.trPoint = undefined;
+        this.blPoint = undefined;
       });
     }
   }
@@ -454,40 +469,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       (await this.binaryService.download(imageId)) as Response
     ).blob();
     return this.imageBlob;
-  }
-
-  /**
-   * Calculate the center point of a polygon
-   */
-  private calculatePolygonCenter(points: L.LatLng[]): L.LatLng {
-    let totalLat = 0;
-    let totalLng = 0;
-    
-    for (const point of points) {
-      totalLat += point.lat;
-      totalLng += point.lng;
-    }
-    
-    return L.latLng(totalLat / points.length, totalLng / points.length);
-  }
-
-  /**
-   * Calculate the angle in degrees from center to a point
-   * Returns angle in range [0, 360)
-   */
-  private calculateAngleFromCenter(center: L.LatLng, point: L.LatLng): number {
-    const deltaY = point.lat - center.lat;
-    const deltaX = point.lng - center.lng;
-    
-    // Calculate angle in radians, then convert to degrees
-    let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-    
-    // Normalize to 0-360 range
-    if (angle < 0) {
-      angle += 360;
-    }
-    
-    return angle;
   }
 
   private updateImageOverlayPosition(): void {
@@ -570,14 +551,23 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     const vertices = this.polygonVertices();
     let polygonVerticesJson: string | undefined = undefined;
 
-    if (vertices) {
+    if (vertices && this.tlPoint && this.trPoint && this.blPoint) {
+      const ring = vertices[0];
+      // Find the BR point (the one that isn't TL, TR, or BL)
+      const brPoint =
+        ring.find(
+          (p) => p !== this.tlPoint && p !== this.trPoint && p !== this.blPoint
+        ) || ring[2];
+
+      // SAVE IN STABLE ORDER: TL, TR, BR, BL
+      const ordered = [this.tlPoint, this.trPoint, brPoint, this.blPoint];
       polygonVerticesJson = JSON.stringify(
-        vertices.map((ring) => ring.map((v) => ({ lat: v.lat, lng: v.lng })))
+        ordered.map((v) => ({ lat: v.lat, lng: v.lng }))
       );
     }
 
     return {
-      placementMode: vertices ? "polygon" : "corners",
+      placementMode: polygonVerticesJson ? "polygon" : "corners",
       topLeftLat: bounds.tl.lat,
       topLeftLng: bounds.tl.lng,
       bottomRightLat: bounds.br.lat,
@@ -585,7 +575,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       polygonVerticesJson: polygonVerticesJson,
     };
   }
-
   ngOnDestroy(): void {
     if (this.map) {
       // Ensure Geoman controls are removed before map destruction
