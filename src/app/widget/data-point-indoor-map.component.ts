@@ -122,7 +122,7 @@ export class DataPointIndoorMapComponent
   ) {}
 
   ngOnChanges(changes: SimpleChanges) {
-    if (changes['config'] && changes['config'].currentValue) {
+    if (changes["config"] && changes["config"].currentValue) {
       // Config has changed, trigger any necessary updates
     }
   }
@@ -130,14 +130,14 @@ export class DataPointIndoorMapComponent
   async ngOnInit() {
     this.leaf = await import("leaflet");
     this.imageRotateService.initialize(this.leaf);
-    
+
     // Read URL parameters and set initial filter state
     this.readUrlParameters();
-    
+
     // Subscribe to URL parameter changes (for browser back/forward navigation)
     this.activatedRoute.queryParams
       .pipe(takeUntil(this.destroy$))
-      .subscribe(params => {
+      .subscribe((params) => {
         this.applyUrlParameters(params);
       });
   }
@@ -215,7 +215,7 @@ export class DataPointIndoorMapComponent
   public filterMarkers(): void {
     // Clear any existing highlight when filtering
     this.clearMarkerHighlight();
-    
+
     if (this.map) {
       this.initMarkers(this.map, this.currentFloorLevel);
     }
@@ -421,22 +421,23 @@ export class DataPointIndoorMapComponent
         const polygonData = JSON.parse(
           this.building.coordinates.polygonVerticesJson
         );
-        // Assuming polygonData is an array of arrays, and we want the first vertex set
-        const vertices = polygonData[0];
+        // Ensure we are accessing the first ring
+        const vertices = Array.isArray(polygonData[0])
+          ? polygonData[0]
+          : polygonData;
 
-        // Assuming V1=TopLeft, V2=TopRight, V4=BottomLeft of the image area
         if (vertices && vertices.length >= 4) {
-          const V1 = vertices[0];
-          const V2 = vertices[1];
-          const V4 = vertices[3]; // The fourth point in the array
+          // COORDINATE LOCK:
+          // GPSComponent now saves in order: 0:TL, 1:TR, 2:BR, 3:BL
+          const V1 = vertices[0]; // Top-Left
+          const V2 = vertices[1]; // Top-Right
+          const V4 = vertices[3]; // Bottom-Left
 
-          // We use the LatLng constructor with the true polygon points
-          // Nullish coalescing is needed here in case polygon points themselves are undefined
-          const topleft = this.leaf.latLng(V1.lat ?? 0, V1.lng ?? 0);
-          const topright = this.leaf.latLng(V2.lat ?? 0, V2.lng ?? 0);
-          const bottomleft = this.leaf.latLng(V4.lat ?? 0, V4.lng ?? 0);
-
-          return { topleft, topright, bottomleft };
+          return {
+            topleft: this.leaf.latLng(V1.lat, V1.lng),
+            topright: this.leaf.latLng(V2.lat, V2.lng),
+            bottomleft: this.leaf.latLng(V4.lat, V4.lng),
+          };
         }
       } catch (e) {
         console.error("Failed to parse polygonVerticesJson:", e);
@@ -554,7 +555,10 @@ export class DataPointIndoorMapComponent
             this.isolatedLayer = clickedLayer;
             this.isZoneIsolated = true;
             // Store zone ID for URL sharing
-            this.isolatedZoneId = zone.id || zone.properties?.id || `zone_${this.loadedZones.indexOf(zone)}`;
+            this.isolatedZoneId =
+              zone.id ||
+              zone.properties?.id ||
+              `zone_${this.loadedZones.indexOf(zone)}`;
             clickedLayer.addTo(mapInstance);
             mapInstance.invalidateSize(true);
             mapInstance.fitBounds(bounds, {
@@ -954,7 +958,7 @@ export class DataPointIndoorMapComponent
 
     // Get label content from managed object
     const labelContent = this.createMarkerLabelContent(managedObject);
-    
+
     // Create the icon HTML with Cumulocity icon classes and label
     const iconHtml = `
       <div class="custom-map-marker-wrapper">
@@ -975,13 +979,19 @@ export class DataPointIndoorMapComponent
             font-size: ${iconSize}px;
           "></i>
         </div>
-        ${labelContent ? `<div class="marker-label">${labelContent}</div>` : ''}
+        ${labelContent ? `<div class="marker-label">${labelContent}</div>` : ""}
       </div>
     `;
 
     // Adjust icon size and anchor to account for label
-    const iconSizeWithLabel: [number, number] = [Math.max(markerSize, 120), markerSize + (labelContent ? 25 : 0)];
-    const iconAnchorWithLabel: [number, number] = [iconSizeWithLabel[0] / 2, markerSize / 2];
+    const iconSizeWithLabel: [number, number] = [
+      Math.max(markerSize, 120),
+      markerSize + (labelContent ? 25 : 0),
+    ];
+    const iconAnchorWithLabel: [number, number] = [
+      iconSizeWithLabel[0] / 2,
+      markerSize / 2,
+    ];
 
     return this.leaf.divIcon({
       html: iconHtml,
@@ -993,14 +1003,14 @@ export class DataPointIndoorMapComponent
 
   /**
    * Creates label content for marker based on managed object data
-   * 
+   *
    * Usage: Add a label to your managed object with the c8y_marker fragment:
    * {
    *   "c8y_marker": {
    *     "label": "Custom Label Text"
    *   }
    * }
-   * 
+   *
    * If no custom label is provided, it falls back to:
    * 1. Device name (truncated to 20 chars)
    * 2. Device type
@@ -1016,7 +1026,7 @@ export class DataPointIndoorMapComponent
     // Default label logic - show device name or type
     const name = managedObject["name"];
     const type = managedObject["type"];
-    
+
     // Priority: name > type > id
     if (name && name.length <= 20) {
       return name;
@@ -1270,22 +1280,26 @@ export class DataPointIndoorMapComponent
    * Highlights and zooms to the marker corresponding to the clicked row
    */
   public highlightRow(row: Row): void {
-
     if (!this.map || !row) {
       return;
     }
 
     // The device data is directly in the row object, not in row.item
-    const deviceId = row.id || row['item']?.id;
-    
-    const markerManagedObject = this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]?.[deviceId];
-    
+    const deviceId = row.id || row["item"]?.id;
+
+    const markerManagedObject =
+      this.markerManagedObjectsForFloorLevel[this.currentFloorLevel]?.[
+        deviceId
+      ];
+
     if (!markerManagedObject) {
       return;
     }
 
-    const markerInstance = markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] as L.Marker | L.CircleMarker;
-    
+    const markerInstance = markerManagedObject[this.KEY_MAP_MARKER_INSTANCE] as
+      | L.Marker
+      | L.CircleMarker;
+
     if (!markerInstance) {
       return;
     }
@@ -1305,12 +1319,12 @@ export class DataPointIndoorMapComponent
     // Pan and zoom to the marker with fixed zoom level
     const currentZoom = this.map.getZoom();
     const targetZoom = 18; // Fixed zoom level to prevent continuous zooming
-    
+
     // Use flyTo for smooth combined pan and zoom
     this.map.flyTo(position, targetZoom, {
       animate: true,
       duration: 0.8,
-      easeLinearity: 0.25
+      easeLinearity: 0.25,
     });
 
     // Optional: Open popup if marker has one
@@ -1323,30 +1337,28 @@ export class DataPointIndoorMapComponent
    * Applies highlight styling to a marker
    */
   private applyMarkerHighlight(marker: L.Marker | L.CircleMarker): void {
-    
     // Check if it's a circle marker by checking if it has setStyle method
-    if (marker && typeof (marker as any).setStyle === 'function') {
+    if (marker && typeof (marker as any).setStyle === "function") {
       // Store original style for circle markers
       this.originalMarkerStyle = {
         color: (marker as any).options.color,
         weight: (marker as any).options.weight,
-        fillOpacity: (marker as any).options.fillOpacity
+        fillOpacity: (marker as any).options.fillOpacity,
       };
 
       // Apply highlight style with prominent border
       (marker as any).setStyle({
         color: this.MARKER_HIGHLIGHT_COLOR,
         weight: 6, // Thicker border for clicked highlight
-        fillOpacity: 1.0
+        fillOpacity: 1.0,
       });
     } else {
       // For icon markers, add border highlight effect
       const markerElement = marker.getElement();
-      
+
       if (markerElement) {
-        markerElement.classList.add('marker-highlighted');
-        markerElement.classList.add('marker-clicked-highlight');
-      
+        markerElement.classList.add("marker-highlighted");
+        markerElement.classList.add("marker-clicked-highlight");
       }
     }
   }
@@ -1360,20 +1372,23 @@ export class DataPointIndoorMapComponent
     }
 
     // Check if it's a circle marker by checking if it has setStyle method
-    if (typeof (this.highlightedMarker as any).setStyle === 'function' && this.originalMarkerStyle) {
+    if (
+      typeof (this.highlightedMarker as any).setStyle === "function" &&
+      this.originalMarkerStyle
+    ) {
       // Restore original style for circle markers
       (this.highlightedMarker as any).setStyle(this.originalMarkerStyle);
     } else {
       // Remove highlight class and inline styles for icon markers
       const markerElement = this.highlightedMarker.getElement();
       if (markerElement) {
-        markerElement.classList.remove('marker-highlighted');
-        markerElement.classList.remove('marker-clicked-highlight');
-        (markerElement as HTMLElement).style.border = '';
-        (markerElement as HTMLElement).style.borderRadius = '';
-        (markerElement as HTMLElement).style.boxShadow = '';
-        (markerElement as HTMLElement).style.animation = '';
-        (markerElement as HTMLElement).style.zIndex = '';
+        markerElement.classList.remove("marker-highlighted");
+        markerElement.classList.remove("marker-clicked-highlight");
+        (markerElement as HTMLElement).style.border = "";
+        (markerElement as HTMLElement).style.borderRadius = "";
+        (markerElement as HTMLElement).style.boxShadow = "";
+        (markerElement as HTMLElement).style.animation = "";
+        (markerElement as HTMLElement).style.zIndex = "";
       }
     }
 
@@ -1415,33 +1430,33 @@ export class DataPointIndoorMapComponent
    */
   private applyUrlParameters(params: any): void {
     // Apply search string from URL
-    if (params['search']) {
-      this.searchString = params['search'];
+    if (params["search"]) {
+      this.searchString = params["search"];
     }
-    
+
     // Apply selected type from URL
-    if (params['type']) {
-      this.selectedType = params['type'];
+    if (params["type"]) {
+      this.selectedType = params["type"];
     }
-    
+
     // Apply floor level from URL
-    if (params['floor'] !== undefined) {
-      const floorLevel = parseInt(params['floor'], 10);
+    if (params["floor"] !== undefined) {
+      const floorLevel = parseInt(params["floor"], 10);
       if (!isNaN(floorLevel) && floorLevel >= 0) {
         this.currentFloorLevel = floorLevel;
       }
     }
-    
+
     // Apply zone configuration from URL
-    if (params['zones'] === 'true') {
+    if (params["zones"] === "true") {
       this.showZones = true;
-    } else if (params['zones'] === 'false') {
+    } else if (params["zones"] === "false") {
       this.showZones = false;
     }
-    
+
     // Apply isolated zone from URL
-    if (params['isolatedZone']) {
-      this.isolatedZoneId = params['isolatedZone'];
+    if (params["isolatedZone"]) {
+      this.isolatedZoneId = params["isolatedZone"];
       // Note: Zone isolation will be applied after zones are loaded in renderZones
     }
   }
@@ -1451,33 +1466,33 @@ export class DataPointIndoorMapComponent
    */
   public getShareableUrl(): string {
     const queryParams: any = {};
-    
+
     if (this.searchString && this.searchString.trim()) {
-      queryParams['search'] = this.searchString.trim();
+      queryParams["search"] = this.searchString.trim();
     }
-    
+
     if (this.selectedType) {
-      queryParams['type'] = this.selectedType;
+      queryParams["type"] = this.selectedType;
     }
-    
+
     if (this.currentFloorLevel !== 0) {
-      queryParams['floor'] = this.currentFloorLevel;
+      queryParams["floor"] = this.currentFloorLevel;
     }
-    
+
     // Include zone configuration
     if (this.showZones) {
-      queryParams['zones'] = 'true';
+      queryParams["zones"] = "true";
     }
-    
+
     if (this.isZoneIsolated && this.isolatedZoneId) {
-      queryParams['isolatedZone'] = this.isolatedZoneId;
+      queryParams["isolatedZone"] = this.isolatedZoneId;
     }
-    
+
     const urlTree = this.router.createUrlTree([], {
       relativeTo: this.activatedRoute,
-      queryParams: queryParams
+      queryParams: queryParams,
     });
-    
+
     return window.location.origin + this.router.serializeUrl(urlTree);
   }
 
@@ -1487,18 +1502,21 @@ export class DataPointIndoorMapComponent
   public onShareConfiguration(): void {
     // Update URL with current configuration
     this.updateUrlParameters();
-    
+
     // Get the shareable URL
     const shareableUrl = this.getShareableUrl();
-    
+
     // Try to copy to clipboard if supported
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(shareableUrl).then(() => {
-        this.alertService.success('Configuration URL copied to clipboard!');
-      }).catch(err => {
-        console.warn('Failed to copy to clipboard:', err);
-        this.fallbackCopyToClipboard(shareableUrl);
-      });
+      navigator.clipboard
+        .writeText(shareableUrl)
+        .then(() => {
+          this.alertService.success("Configuration URL copied to clipboard!");
+        })
+        .catch((err) => {
+          console.warn("Failed to copy to clipboard:", err);
+          this.fallbackCopyToClipboard(shareableUrl);
+        });
     } else {
       this.fallbackCopyToClipboard(shareableUrl);
     }
@@ -1508,27 +1526,27 @@ export class DataPointIndoorMapComponent
    * Fallback method to copy URL to clipboard for older browsers
    */
   private fallbackCopyToClipboard(text: string): void {
-    const textArea = document.createElement('textarea');
+    const textArea = document.createElement("textarea");
     textArea.value = text;
-    textArea.style.position = 'fixed';
-    textArea.style.left = '-999999px';
-    textArea.style.top = '-999999px';
+    textArea.style.position = "fixed";
+    textArea.style.left = "-999999px";
+    textArea.style.top = "-999999px";
     document.body.appendChild(textArea);
     textArea.focus();
     textArea.select();
-    
+
     try {
-      const successful = document.execCommand('copy');
+      const successful = document.execCommand("copy");
       if (successful) {
-        this.alertService.success('Configuration URL copied to clipboard!');
+        this.alertService.success("Configuration URL copied to clipboard!");
       } else {
-        this.alertService.warning('Please copy the URL manually: ' + text);
+        this.alertService.warning("Please copy the URL manually: " + text);
       }
     } catch (err) {
-      console.warn('Fallback copy failed:', err);
-      this.alertService.warning('Please copy the URL manually: ' + text);
+      console.warn("Fallback copy failed:", err);
+      this.alertService.warning("Please copy the URL manually: " + text);
     }
-    
+
     document.body.removeChild(textArea);
   }
 
@@ -1537,37 +1555,37 @@ export class DataPointIndoorMapComponent
    */
   private updateUrlParameters(): void {
     const queryParams: any = {};
-    
+
     // Add search string to URL if not empty
     if (this.searchString && this.searchString.trim()) {
-      queryParams['search'] = this.searchString.trim();
+      queryParams["search"] = this.searchString.trim();
     }
-    
+
     // Add selected type to URL if not empty
     if (this.selectedType) {
-      queryParams['type'] = this.selectedType;
+      queryParams["type"] = this.selectedType;
     }
-    
+
     // Add floor level to URL if not default (0)
     if (this.currentFloorLevel !== 0) {
-      queryParams['floor'] = this.currentFloorLevel;
+      queryParams["floor"] = this.currentFloorLevel;
     }
-    
+
     // Add zone configuration
     if (this.showZones) {
-      queryParams['zones'] = 'true';
+      queryParams["zones"] = "true";
     }
-    
+
     if (this.isZoneIsolated && this.isolatedZoneId) {
-      queryParams['isolatedZone'] = this.isolatedZoneId;
+      queryParams["isolatedZone"] = this.isolatedZoneId;
     }
-    
+
     // Update URL without triggering navigation
     this.router.navigate([], {
       relativeTo: this.activatedRoute,
       queryParams: queryParams,
-      queryParamsHandling: 'replace', // Replace current query params
-      replaceUrl: true // Don't add to browser history
+      queryParamsHandling: "replace", // Replace current query params
+      replaceUrl: true, // Don't add to browser history
     });
   }
 
@@ -1576,12 +1594,14 @@ export class DataPointIndoorMapComponent
    */
   private applyIsolatedZoneFromUrl(): void {
     if (this.isolatedZoneId && this.loadedZones.length > 0 && this.map) {
-      const targetZone = this.loadedZones.find(zone => {
-        return zone.id === this.isolatedZoneId || 
-               zone.properties?.id === this.isolatedZoneId ||
-               `zone_${this.loadedZones.indexOf(zone)}` === this.isolatedZoneId;
+      const targetZone = this.loadedZones.find((zone) => {
+        return (
+          zone.id === this.isolatedZoneId ||
+          zone.properties?.id === this.isolatedZoneId ||
+          `zone_${this.loadedZones.indexOf(zone)}` === this.isolatedZoneId
+        );
       });
-      
+
       if (targetZone && targetZone.geometry) {
         const layer = this.leaf.geoJSON(targetZone.geometry);
         layer.eachLayer((vectorLayer) => {
@@ -1592,8 +1612,11 @@ export class DataPointIndoorMapComponent
               fillOpacity: 0.3,
             });
           }
-          
-          if ((vectorLayer as any).getBounds && (vectorLayer as any).getBounds().isValid()) {
+
+          if (
+            (vectorLayer as any).getBounds &&
+            (vectorLayer as any).getBounds().isValid()
+          ) {
             this.zonesFeatureGroup!.clearLayers();
             this.isolatedLayer = vectorLayer;
             this.isZoneIsolated = true;
