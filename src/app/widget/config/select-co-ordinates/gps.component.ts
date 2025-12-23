@@ -284,7 +284,33 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.tlPoint = undefined;
       this.trPoint = undefined;
       this.blPoint = undefined;
-      this.emitConfigChange(this.imageBounds());
+      //this.emitConfigChange(this.imageBounds());
+    });
+
+    mapWithPm.on("pm:globalrotatemodetoggled", (e: any) => {
+      const layers = this.featureGroup?.getLayers() || [];
+
+      layers.forEach((layer: any) => {
+        if (!layer.pm) return;
+
+        if (e.enabled) {
+          // Rotation Mode Enabled: Turn OFF Edit Mode (hides white squares)
+          if (layer.pm.enabled()) {
+            layer.pm.disable();
+            // Mark this layer so we remember to re-enable it later
+            layer._wasEditable = true;
+          }
+        } else {
+          // Rotation Mode Disabled: Turn ON Edit Mode (restores white squares)
+          if (layer._wasEditable) {
+            layer.pm.enable({
+              allowSelfIntersection: false,
+              rectangleEditable: true,
+            });
+            delete layer._wasEditable;
+          }
+        }
+      });
     });
   }
 
@@ -397,7 +423,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // 3. Force the image overlay to reposition using the new vertices
     this.updateImageOverlayPosition();
-    this.emitConfigChange(this.imageBounds());
+    //   this.emitConfigChange(this.imageBounds());
   }
 
   private enableLayerInteraction(layer: any) {
@@ -575,6 +601,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       polygonVerticesJson: polygonVerticesJson,
     };
   }
+
   ngOnDestroy(): void {
     if (this.map) {
       // Ensure Geoman controls are removed before map destruction
@@ -583,8 +610,9 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       this.map.remove();
     }
   }
+
   onCancel(): void {
-    this.boundaryChange.emit();
+    //  this.boundaryChange.emit();
     this.bsModalRef.hide();
   }
 
