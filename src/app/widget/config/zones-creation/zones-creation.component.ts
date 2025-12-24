@@ -4,7 +4,6 @@ import {
   AfterViewInit,
   OnDestroy,
   signal,
-  effect,
   Input,
   OnInit,
   ViewEncapsulation,
@@ -57,16 +56,14 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor(
     private bsModalRef: BsModalRef,
     private binaryService: InventoryBinaryService,
-    private imageRotateService: ImageRotateService // <--- INJECTED SERVICE
+    private imageRotateService: ImageRotateService
   ) {}
 
   async ngOnInit() {
-    // 1. Initialize ImageRotateService (must be done before using L.imageOverlay.rotated)
     if (typeof L !== "undefined") {
       this.imageRotateService.initialize(L);
     }
 
-    // 2. Set imageBounds from initial config
     if (this.initialConfig?.coordinates?.topLeftLat !== 0) {
       this.imageBounds.set({
         tl: {
@@ -80,13 +77,11 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     }
 
-    // 3. Initialize allZonesByLevel cache from input
     const inputAllZones = this.initialConfig.allZonesByLevel as any;
     if (inputAllZones) {
       Object.assign(this.allZonesByLevel, inputAllZones);
     }
 
-    // 4. Load current floor's zones into the 'zones' signal
     const currentLevelIndex = this.currentFloorLevel.toString();
     const zonesJsonString = this.allZonesByLevel[currentLevelIndex];
 
@@ -110,7 +105,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
         this.initialConfig.coordinates.zoomLevel
       );
     } else {
-      this.currentZoomLevel = 18; // Default fallback
+      this.currentZoomLevel = 18;
     }
   }
 
@@ -145,30 +140,33 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     const coords = this.initialConfig.coordinates;
     if (!coords) return undefined;
 
-    // 1. Prioritize Polygon vertices (Matches GPS sequential order: TL, TR, BR, BL)
     if (coords.polygonVerticesJson) {
       try {
         const polygonData = JSON.parse(coords.polygonVerticesJson);
-        // Geoman usually returns a nested array [[p1, p2, p3, p4]]
         const ring = Array.isArray(polygonData[0])
           ? polygonData[0]
           : polygonData;
 
         if (ring && ring.length >= 4) {
-          // Use the same sorting/anchor logic as GPS component to prevent flipping
+          // Stable sorting to prevent flipping
+          // 1. Sort by Latitude (North to South)
           const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
+
+          // 2. Take top 2 (North-most) and sort by Longitude (West to East) -> TL, TR
           const topTwo = [sortedByLat[0], sortedByLat[1]].sort(
             (a, b) => a.lng - b.lng
           );
-
           const tl = topTwo[0];
           const tr = topTwo[1];
 
+          // 3. Find remaining points
           const remaining = ring.filter(
             (p: any) =>
               (p.lat !== tl.lat || p.lng !== tl.lng) &&
               (p.lat !== tr.lat || p.lng !== tr.lng)
           );
+
+          // 4. Sort remaining by Longitude -> BL (left-most of bottom set)
           const bl =
             remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
 
@@ -183,7 +181,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
-    // 2. Fallback: Use the bounding box corners if no tilt is present
     const topLat = coords.topLeftLat ?? 0;
     const leftLng = coords.topLeftLng ?? 0;
     const bottomLat = coords.bottomRightLat ?? 0;
@@ -202,7 +199,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     const currentLevelConfig =
       this.initialConfig.levels?.[this.currentFloorLevel];
 
-    // Map initialization
     this.map = L.map(this.mapReference.nativeElement, {
       center: bounds?.getCenter() || [51.227, 6.773],
       zoom: this.currentZoomLevel,
@@ -215,12 +211,31 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
 
-    // Initialize Geoman controls first (and feature group)
     this.initGeomanControl();
 
-    // Image Overlay Placement using three-point logic
     if (currentLevelConfig?.binaryId && bounds) {
       await this.placeImageOverlay(currentLevelConfig.binaryId);
+    }
+
+    // Draw zones after initialization
+    setTimeout(() => {
+      if (this.map) {
+        this.map.invalidateSize();
+        this.drawSavedZones();
+        this.centerMapOnBounds();
+      }
+    }, 100);
+  }
+
+  // --- NEW HELPER: Forces update of 3-point positioning ---
+  private updateImageOverlayPosition(): void {
+    if (!this.imageOverlayLayer) return;
+    const cp = this.getValidatedControlPoints();
+    if (!cp) return;
+
+    const layerAny = this.imageOverlayLayer as any;
+    if (typeof layerAny.reposition === "function") {
+      layerAny.reposition(cp.topleft, cp.topright, cp.bottomleft);
     }
   }
 
@@ -238,14 +253,35 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
           controlPoints.topleft,
           controlPoints.topright,
           controlPoints.bottomleft,
-          { opacity: 1, interactive: true }
+          {
+            opacity: 1,
+            interactive: true,
+            crossOrigin: "anonymous", // Critical for SVG rendering at high zoom
+          }
         );
 
-        this.imageOverlayLayer!.addTo(this.map!);
+        // --- FIX: Attach Load Listener ---
+        this.imageOverlayLayer!.on("load", () => {
+          // Force repositioning once the browser knows the image dimensions
+          this.updateImageOverlayPosition();
+        });
 
-        // Use the actual layer bounds to fit the map, accounting for the tilt
-        const layerBounds = this.imageOverlayLayer!.getBounds();
-        this.map!.fitBounds(layerBounds);
+        // --- FIX: Add using requestAnimationFrame ---
+        requestAnimationFrame(() => {
+          if (this.imageOverlayLayer && this.map) {
+            this.imageOverlayLayer.addTo(this.map);
+            this.updateImageOverlayPosition();
+          }
+        });
+
+        // Use the actual layer bounds to fit the map
+        // We delay this slightly to ensure the layer is added
+        setTimeout(() => {
+          if (this.imageOverlayLayer && this.map) {
+            const layerBounds = this.imageOverlayLayer.getBounds();
+            this.map.fitBounds(layerBounds);
+          }
+        }, 50);
       } else {
         // Fallback logic
         const bounds = this.getLeafletBounds(this.imageBounds());
@@ -262,13 +298,11 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   private drawSavedZones(): void {
     if (!this.map) return;
 
-    // Ensure we have a feature group
     if (!this.zoneFeatureGroup) {
       this.zoneFeatureGroup = new L.FeatureGroup();
       this.map.addLayer(this.zoneFeatureGroup);
     }
 
-    // Clear existing layers
     this.zoneFeatureGroup.clearLayers();
 
     const currentZones = this.zones();
@@ -322,7 +356,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.map) return;
     const mapWithPm = this.map as any;
 
-    // Initialize the FeatureGroup
     this.zoneFeatureGroup = new L.FeatureGroup();
     this.map.addLayer(this.zoneFeatureGroup);
 
@@ -333,7 +366,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
       drawPolyline: false,
       drawCircle: false,
       drawRectangle: true,
-      drawPolygon: false,
+      drawPolygon: true,
       drawText: false,
       editMode: true,
       dragMode: true,
@@ -375,13 +408,9 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   public async onFloorLevelChanged(newLevelIndex: number): Promise<void> {
     if (this.currentFloorLevel === newLevelIndex) return;
 
-    // 1. Save the current state of the old floor
     this.updateZonesState();
-
-    // 2. Update the active level index
     this.currentFloorLevel = newLevelIndex;
 
-    // 3. Load the new floor's data from the allZonesByLevel cache
     const zonesJsonString = this.allZonesByLevel[newLevelIndex.toString()];
 
     let savedZones: any[] = [];
@@ -397,7 +426,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     this.zones.set(savedZones);
 
-    // 4. Redraw map contents
     if (this.map) {
       await this.redrawMapContents();
     }
@@ -407,12 +435,10 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.map) return;
     const mapWithPm = this.map as any;
 
-    // Clear all layers
     this.map.eachLayer((layer) => {
       layer.remove();
     });
 
-    // Add base tiles
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: this.MAX_ZOOM,
       maxNativeZoom: 19,
@@ -426,10 +452,8 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     const bounds = this.getLeafletBounds(initialBounds);
 
     if (currentLevelConfig?.binaryId && bounds) {
-      // Use the injected service logic for image placement
       await this.placeImageOverlay(currentLevelConfig.binaryId);
 
-      // Re-initialize feature group and geoman controls
       this.zoneFeatureGroup = new L.FeatureGroup();
       this.map.addLayer(this.zoneFeatureGroup);
       mapWithPm.pm.setGlobalOptions({
@@ -453,10 +477,8 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
         const geoJson = layer.toGeoJSON();
         let rotationAngle = 0;
 
-        // 1. Check layer options (where Geoman typically stores the final rotation)
         rotationAngle = layer.options.rotation || 0;
 
-        // 2. If not found in options, check the Geoman editing instance state
         if (rotationAngle === 0 && layer.pm) {
           rotationAngle =
             (layer.pm as any)._rotation || (layer.pm as any)._rotateAngle || 0;
@@ -473,7 +495,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     const currentLevelIndex = this.currentFloorLevel.toString();
     this.allZonesByLevel[currentLevelIndex] = JSON.stringify(currentZones);
 
-    this.emitConfigChange(null);
+    //this.emitConfigChange(null);
   }
 
   private emitConfigChange(payload: any): void {
