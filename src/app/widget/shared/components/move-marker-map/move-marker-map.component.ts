@@ -205,6 +205,21 @@ export class MoveMarkerMapComponent
           { opacity: 1, interactive: true }
         ).addTo(this.map);
 
+        requestAnimationFrame(() => {
+          (this.imageLayer as any).reposition(
+            controlPoints.topleft,
+            controlPoints.topright,
+            controlPoints.bottomleft
+          );
+          setTimeout(() => {
+            (this.imageLayer as any).reposition(
+              controlPoints.topleft,
+              controlPoints.topright,
+              controlPoints.bottomleft
+            );
+          }, 50);
+        });
+
         // Fit the map to the actual tilted layer bounds
         if (this.imageLayer) {
           this.map.fitBounds(this.imageLayer.getBounds());
