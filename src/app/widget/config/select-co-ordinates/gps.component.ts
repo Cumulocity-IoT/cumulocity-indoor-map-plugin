@@ -192,6 +192,7 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         this.floorPlanLayer = rotatedFactory(imageUrl, cp.tl, cp.tr, cp.bl, {
           opacity: this.floorPlanOpacity,
           interactive: true,
+          crossOrigin: "anonymous",
         }) as L.ImageOverlay;
       } else {
         // Fallback to non-rotated standard L.imageOverlay
@@ -200,7 +201,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
           interactive: true,
         });
       }
-      if (this.showFloorPlan) {
+      if (this.showFloorPlan && this.floorPlanLayer) {
+        this.floorPlanLayer.on("load", () => {
+          this.updateImageOverlayPosition();
+        });
         (this.floorPlanLayer as any).addTo(this.map);
       }
     } else {
@@ -540,18 +544,27 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onToggleFloorPlan(event: any): void {
     this.showFloorPlan = event.target.checked;
+
     if (!this.map || !this.floorPlanLayer) {
       console.warn("Floor plan layer not initialized or map not ready.");
       return;
     }
 
     if (this.showFloorPlan) {
+      // 1. Add the layer to the map
       this.floorPlanLayer.addTo(this.map);
+
+      // SVGs at high zoom need a moment to calculate viewBox
+      requestAnimationFrame(() => {
+        this.updateImageOverlayPosition();
+
+        // Double-tap: specific fix for some browsers (Safari/Firefox) with SVGs
+        setTimeout(() => this.updateImageOverlayPosition(), 50);
+      });
     } else {
       this.map.removeLayer(this.floorPlanLayer);
     }
   }
-
   onOpacityChange(newOpacity: number): void {
     this.floorPlanOpacity = newOpacity;
     if (this.floorPlanLayer && (this.floorPlanLayer as any).setOpacity) {
