@@ -7,7 +7,6 @@ import {
 import { IIdentified } from "@c8y/client";
 import { BsModalRef } from "ngx-bootstrap/modal";
 import { AssetSelectionChangeEvent, GroupNodeService } from "@c8y/ngx-components/assets-navigator";
-import { MAX_PAGE_SIZE } from "@c8y/ngx-components";
 
 @Component({
   selector: "assign-devices-modal",
@@ -47,14 +46,10 @@ export class AssignDevicesModalComponent implements OnInit {
   }
 
   selectLevel(level: MapConfigurationLevel) {
-
-    console.log("Selected level:", level);
-
     this.selectedLevel = level;
     this.showComponent = false;
     this.model = [];
 
-    // 3️⃣ Small delay to ensure Angular destroys and rebuilds selector
     setTimeout(() => {
       // Load previously saved devices for that floor (if any)
       const levelFromBuilding = this.building.levels.find(l => l["binaryId"] === level["binaryId"]);
@@ -77,7 +72,6 @@ export class AssignDevicesModalComponent implements OnInit {
         ...this.model.map((mo) => ({ id: mo.id as string, name: mo["name"] })),
       ];
     }
-    console.log(this.building.levels)
   }
 
   onSave() {

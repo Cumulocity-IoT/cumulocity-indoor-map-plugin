@@ -12,7 +12,6 @@ import { GPSComponent } from "./select-co-ordinates/gps.component";
 import { ZonesComponent } from "./zones-creation/zones-creation.component";
 import { AssignDevicesModalComponent } from "./map-config-modal/assign-devices-modal/assign-devices-modal.component";
 import { BuildingService } from "../../services/building.service";
-import { EventPollingService } from "../polling/event-polling.service";
 import { isEmpty } from "lodash";
 import { FloorConfigModalComponent } from "./floor-configuration-modal/floor-config-modal.component";
 import { ColumnConfigModalComponent } from "./column-config-modal/column-config-modal.component";
@@ -33,7 +32,6 @@ import { IManagedObject } from "@c8y/client";
     BuildingService,
     AlertService,
     MeasurementRealtimeService,
-    EventPollingService,
   ],
 })
 export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
@@ -45,8 +43,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   selectedBuilding?: MapConfiguration;
   selectedMapConfigurationId?: string; /** 🔹 For typeahead binding */
 
-
-  managedObjectsForFloorLevels : IManagedObject[][] | undefined;
+  managedObjectsForFloorLevels: IManagedObject[][] | undefined;
   mapConfigInput = "";
   showCreateOption = false;
 
@@ -69,20 +66,19 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
 
   ngOnInit() {
     this.initMapConfigurations();
-  } /** 🔹 Prüft, ob Bauwerksgrenzen konfiguriert sind (prüft auf mindestens eine Koordinate) */
+  }
 
   hasBuildingBoundaries(): boolean {
     if (!this.selectedBuilding?.coordinates) {
       return false;
-    } // Prüft, ob mindestens eine der 4 Koordinaten vorhanden ist, um Konfiguration anzuzeigen
+    }
     return (
       !!this.selectedBuilding.coordinates.topLeftLat ||
       !!this.selectedBuilding.coordinates.topLeftLng ||
       !!this.selectedBuilding.coordinates.bottomRightLat ||
       !!this.selectedBuilding.coordinates.bottomRightLng
     );
-  } /** 🔹 Prüft, ob Stockwerke konfiguriert sind (prüft auf mindestens ein Level) */
-
+  }
   hasFloorConfiguration(): boolean {
     return (
       !!this.selectedBuilding?.levels && this.selectedBuilding.levels.length > 0
@@ -113,7 +109,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       this.selectedMapConfigurationId = undefined;
       this.showCreateOption = true;
     }
-  } /** 🔹 When user selects an existing item from typeahead suggestions */
+  } 
 
   onMapConfigurationSelected(event: TypeaheadMatch): void {
     const selected: MapConfiguration = event.item;
@@ -122,7 +118,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     this.selectedBuilding = selected;
     this.showCreateOption = false;
     this.onMapConfigurationChanged();
-  } /** 🔹 Creates a new configuration when user clicks "Create" */
+  } 
 
   createNewMapConfiguration(): void {
     if (!this.mapConfigInput.trim()) return;
@@ -147,7 +143,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       }
     });
     this.showCreateOption = false;
-  } // --- Existing methods below unchanged ---
+  } 
 
   async onMapConfigurationChanged(): Promise<void> {
     if (!this.selectedMapConfigurationId) return;
@@ -225,7 +221,10 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   onEditDeviceLocation(): void {
     if (!this.selectedBuilding) return;
     this.modalService.show(AssignLocationModalComponent, {
-      initialState: { building: this.selectedBuilding, managedObjectsForFloorLevels: this.managedObjectsForFloorLevels } as any,
+      initialState: {
+        building: this.selectedBuilding,
+        managedObjectsForFloorLevels: this.managedObjectsForFloorLevels,
+      } as any,
       class: "modal-lg",
     });
   }
@@ -259,20 +258,19 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   }
 
   openColumnConfigModal(): void {
-    // Flatten all devices from all floors for property analysis
     const allDevices: IManagedObject[] = [];
     if (this.managedObjectsForFloorLevels) {
-      this.managedObjectsForFloorLevels.forEach(floorDevices => {
+      this.managedObjectsForFloorLevels.forEach((floorDevices) => {
         if (Array.isArray(floorDevices)) {
           allDevices.push(...floorDevices);
         }
       });
     }
-    
+
     const modalRef = this.modalService.show(ColumnConfigModalComponent, {
-      initialState: { 
+      initialState: {
         currentConfig: this.config?.columnConfig || [],
-        devices: allDevices
+        devices: allDevices,
       } as any,
       class: "modal-lg",
     });
@@ -282,19 +280,9 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
         this.config = {} as any;
       }
       this.config.columnConfig = columnConfig;
-      
-      // Manually trigger save to persist column configuration immediately
-      this.saveColumnConfiguration();
-    });  
+    });
   }
 
-  /**
-   * Save column configuration immediately
-   */
-  private saveColumnConfiguration(): void {
-    // The column configuration is stored in this.config.columnConfig
-    // It will be automatically saved with the widget configuration
-  }
 
   private initMapConfigurations(): void {
     this.buildingService
@@ -317,12 +305,13 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
                 this.selectedBuilding.id
               );
 
-            this.managedObjectsForFloorLevels  =
-              await this.buildingService.loadMarkersForLevels(fullConfig.levels);
-           
-            this.selectedBuilding = fullConfig; // this.onMapConfigurationChanged();
+            this.managedObjectsForFloorLevels =
+              await this.buildingService.loadMarkersForLevels(
+                fullConfig.levels
+              );
+
+            this.selectedBuilding = fullConfig; 
           } catch {
-            // keep existing selectedBuilding on error and still trigger change handling
             this.onMapConfigurationChanged();
           }
         }
@@ -380,14 +369,14 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       .then(() => {
         this.isSaved = true;
         this.config.buildingId = this.selectedBuilding?.id || "";
-        
+
         // Make sure column config is copied to the config that gets saved
         if (config && this.config.columnConfig) {
           config.columnConfig = this.config.columnConfig;
         }
-        
+
         // Column config is automatically persisted as part of widget configuration
-        
+
         return true;
       })
       .catch(() => false);

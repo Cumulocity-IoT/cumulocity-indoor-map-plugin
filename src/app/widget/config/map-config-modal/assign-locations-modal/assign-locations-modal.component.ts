@@ -3,7 +3,6 @@ import {
   Input,
   OnDestroy,
   OnInit,
-  ViewChild,
   ViewEncapsulation,
 } from "@angular/core";
 import {

@@ -25,7 +25,6 @@ import {
 import type * as L from "leaflet";
 import { MeasurementRealtimeService, Row } from "@c8y/ngx-components";
 import { BehaviorSubject, fromEvent, Subscription, takeUntil } from "rxjs";
-import { EventPollingService } from "./polling/event-polling.service";
 import { get } from "lodash";
 import { BuildingService } from "../services/building.service";
 import { ImageRotateService } from "../services/image-rotate.service";
@@ -38,7 +37,6 @@ import { LeafletPopupActionModalComponent } from "./shared/components/leaflet-po
   styleUrls: ["./data-point-indoor-map.component.less"],
   providers: [
     MeasurementRealtimeService,
-    EventPollingService,
     BuildingService,
     ImageRotateService,
   ],

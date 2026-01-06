@@ -366,7 +366,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     if (vertices && vertices[0] && vertices[0].length >= 4) {
       const ring = vertices[0];
 
-      // If we haven't tracked points yet, or it's a new draw, find the corners
       if (!this.tlPoint) {
         const bounds = L.latLngBounds(ring);
         const nw = bounds.getNorthWest();
@@ -401,7 +400,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
       };
     }
 
-    // Fallback for AABB
     const bounds = this.imageBounds();
     return {
       tl: L.latLng(bounds.tl.lat, bounds.tl.lng),
@@ -412,22 +410,17 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private handleLayerUpdate(layer: any) {
     if (layer instanceof L.Rectangle || layer instanceof L.Polygon) {
-      // 1. Capture the upright bounding box for standard metadata
       this.updateImageBoundsFromLeaflet(layer.getBounds());
 
-      // 2. Capture the actual skewed/rotated vertices
       let latLngs = layer.getLatLngs();
 
-      // Normalize to LatLng[][] so it matches the expected signal type
       const normalizedVertices = Array.isArray(latLngs[0])
         ? latLngs
         : [latLngs];
       this.polygonVertices.set(normalizedVertices as L.LatLng[][]);
     }
 
-    // 3. Force the image overlay to reposition using the new vertices
     this.updateImageOverlayPosition();
-    //   this.emitConfigChange(this.imageBounds());
   }
 
   private enableLayerInteraction(layer: any) {
@@ -437,7 +430,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         rectangleEditable: true,
       });
 
-      // Use a combined listener for all geometric changes
       layer.on("pm:change pm:edit pm:rotate pm:dragend", (e: any) => {
         const latLngs = layer.getLatLngs();
         const ring = Array.isArray(latLngs[0]) ? latLngs[0] : latLngs;
@@ -447,7 +439,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
         }
 
         this.polygonVertices.set([ring] as L.LatLng[][]);
-        // Note: handleLayerUpdate calls updateImageOverlayPosition
         this.handleLayerUpdate(layer);
       });
 
@@ -480,7 +471,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   private centerMapOnBounds(): void {
     const bounds = this.getImageBounds();
 
-    // Only attempt to fit bounds if the coordinates are actually set (not 0)
     if (this.map && bounds.isValid() && this.imageBounds().tl.lat !== 0) {
       const center = bounds.getCenter();
       this.map.setView(center, this.currentZoomLevel, {
@@ -551,14 +541,10 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (this.showFloorPlan) {
-      // 1. Add the layer to the map
       this.floorPlanLayer.addTo(this.map);
 
-      // SVGs at high zoom need a moment to calculate viewBox
       requestAnimationFrame(() => {
         this.updateImageOverlayPosition();
-
-        // Double-tap: specific fix for some browsers (Safari/Firefox) with SVGs
         setTimeout(() => this.updateImageOverlayPosition(), 50);
       });
     } else {
@@ -592,13 +578,11 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (vertices && this.tlPoint && this.trPoint && this.blPoint) {
       const ring = vertices[0];
-      // Find the BR point (the one that isn't TL, TR, or BL)
       const brPoint =
         ring.find(
           (p) => p !== this.tlPoint && p !== this.trPoint && p !== this.blPoint
         ) || ring[2];
 
-      // SAVE IN STABLE ORDER: TL, TR, BR, BL
       const ordered = [this.tlPoint, this.trPoint, brPoint, this.blPoint];
       polygonVerticesJson = JSON.stringify(
         ordered.map((v) => ({ lat: v.lat, lng: v.lng }))
@@ -617,7 +601,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.map) {
-      // Ensure Geoman controls are removed before map destruction
       (this.map as any).pm.removeControls();
       this.map.off();
       this.map.remove();
@@ -630,8 +613,6 @@ export class GPSComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onSave(): void {
-    // Current boundary state is saved implicitly through the effect/handleLayerUpdate calls
-    // during drawing/editing. We just need to trigger the final emit.
     this.emitConfigChange({});
     this.bsModalRef.hide();
   }

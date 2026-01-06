@@ -245,7 +245,6 @@ export class FloorConfigModalComponent implements OnInit {
   }
 
   cancel(): void {
-    console.log("Configuration cancelled.");
     this.modalRef.hide();
   }
 }
