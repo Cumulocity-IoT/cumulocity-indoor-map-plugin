@@ -1,0 +1,155 @@
+<div class="modal-header separator text-center bg-primary text-white">
+  <h4 class="text-uppercase" style="margin: 0; letter-spacing: 0.15em">
+    Configure Data Grid Columns
+  </h4>
+</div>
+
+<div class="modal-body">
+  <div class="row">
+    <div class="col-md-12">
+      <p class="text-muted">
+        Columns below were automatically discovered from your devices. Select which ones to display, customize their labels, or add custom properties.
+      </p>
+      <div class="alert alert-info">
+        <i class="c8y-icon c8y-icon-info-circle"></i>
+        <strong>Green columns</strong> are currently visible in your data grid. 
+        <strong>Gray columns</strong> are hidden. Toggle the switches to show/hide columns and edit labels as needed.
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-12">
+      <div class="form-group">
+        <label class="c8y-label">Available Columns</label>
+        <div class="column-list">
+          <div 
+            *ngFor="let column of availableColumns; let i = index; trackBy: trackByKey" 
+            class="column-item"
+            [class.enabled]="column.enabled"
+            [class.disabled]="!column.enabled"
+          >
+            <div class="column-content">
+              <!-- Toggle checkbox -->
+              <div class="column-toggle">
+                <label class="c8y-switch">
+                  <input 
+                    type="checkbox" 
+                    [(ngModel)]="column.enabled"
+                    (change)="onColumnToggle(column)"
+                  />
+                  <span></span>
+                </label>
+              </div>
+              
+              <!-- Column info -->
+              <div class="column-info">
+                <input 
+                  type="text" 
+                  class="form-control column-label-input"
+                  [(ngModel)]="column.label"
+                  placeholder="Column label"
+                  maxlength="50"
+                />
+                <div class="column-key text-muted">{{ column.key }}</div>
+              </div>
+              
+              <!-- Order controls -->
+              <div class="column-controls">
+                <button 
+                  type="button" 
+                  class="btn btn-clean btn-sm"
+                  [disabled]="i === 0"
+                  (click)="moveColumnUp(i)"
+                  title="Move up"
+                >
+                  <i c8yIcon="chevron-up"></i>
+                </button>
+                <span class="order-number">{{ column.order }}</span>
+                <button 
+                  type="button" 
+                  class="btn btn-clean btn-sm"
+                  [disabled]="i === availableColumns.length - 1"
+                  (click)="moveColumnDown(i)"
+                  title="Move down"
+                >
+                  <i c8yIcon="chevron-down"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Add Custom Property Card -->
+    <div class="col-md-12 mt-4">
+      <div class="card">
+        <div class="card-header bg-light">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+              <i c8yIcon="plus-circle" class="text-primary"></i>
+              <h6  style="margin-left: 6px;">Add Custom Property - Don't see a property you need? Add it manually using the exact property path.</h6>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Always visible simple form -->
+          <div class="row">
+            <div class="col-md-4">
+              <label class="c8y-label">Property Path <span class="text-danger">*</span></label>
+              <input 
+                type="text" 
+                class="form-control"
+                [(ngModel)]="customPropertyKey"
+                placeholder="Enter property path..."
+                maxlength="100"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="c8y-label">Display Name</label>
+              <input 
+                type="text" 
+                class="form-control"
+                [(ngModel)]="customPropertyLabel"
+                placeholder="Auto-generated if empty"
+                maxlength="50"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="c8y-label">&nbsp;</label>
+              <button 
+                type="button" 
+                class="btn btn-primary btn-block"
+                (click)="addCustomProperty()"
+                [disabled]="!customPropertyKey.trim()"
+              >
+                <i c8yIcon="plus"></i> Add Property
+              </button>
+            </div>
+          </div>
+          
+          <!-- Success message -->
+          <div *ngIf="customPropertyAdded" class="alert alert-success mt-3 mb-0">
+            <i c8yIcon="check-circle"></i>
+            Property "{{ lastAddedProperty }}" has been added to your columns.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-footer">
+  <button type="button" class="btn btn-default" (click)="cancel()">
+    Cancel
+  </button>
+  <button 
+    type="button" 
+    class="btn btn-primary" 
+    (click)="saveAndClose()"
+    [disabled]="getEnabledColumns().length === 0"
+  >
+    <i c8yIcon="save"></i> Save Configuration
+  </button>
+</div>

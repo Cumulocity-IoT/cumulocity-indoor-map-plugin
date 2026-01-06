@@ -17,7 +17,7 @@
  */
 import { Component, Input, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { DatapointPopup } from '../../data-point-indoor-map.model';
+import { DatapointPopup } from '../../../models/data-point-indoor-map.model';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subject } from 'rxjs';
 
@@ -32,7 +32,7 @@ export class ManagedDatapointsPopupModalComponent implements OnInit {
 
   public onSave$: Subject<DatapointPopup[]> = new Subject<DatapointPopup[]>();
 
-  formGroup?: FormGroup;
+  formGroup!: FormGroup;
 
   constructor(private modalRef: BsModalRef, private formBuilder: FormBuilder) {}
 

@@ -1,0 +1,58 @@
+<div class="modal-header separator text-center bg-primary text-white">
+  <h4 class="text-uppercase" style="margin: 0; letter-spacing: 0.15em">
+    {{ building.id ? "Update Building" : "Create Building" }}
+  </h4>
+</div>
+<div class="modal-body">
+  <div class="row" style="display: contents; height: 100%">
+    <div class="col-md-4" style="height: 100%; overflow: auto">
+      <div class="form-group">
+        <label for="levelDropdown">Select Level</label>
+        <select
+          id="levelDropdown"
+          class="form-control"
+          [(ngModel)]="selectedLevel"
+          (change)="
+            selectedLevel && selectLevel(selectedLevel);
+            selectedItemIsSensor = false
+          "
+        >
+          <option *ngFor="let level of building.levels" [ngValue]="level">
+            {{ level.name }}
+          </option>
+        </select>
+      </div>
+
+      <c8y-list-group class="separator-top">
+        <ng-container *ngFor="let mo of managedObjectsForSelectedLevel">
+          <c8y-li
+            [class]="{ highlighted: selectedItem === mo }"
+            (click)="selectItem(mo); selectedItemIsSensor = true"
+            class="nested-li"
+            >{{ mo["name"] }}<c8y-li-icon icon="sensor"></c8y-li-icon
+          ></c8y-li>
+        </ng-container>
+      </c8y-list-group>
+    </div>
+    <div class="col-md-8" style="height: 60vh">
+      <move-marker-map
+        [imageBlob]="imageBlob"
+        [zoomLevel]="building.coordinates.zoomLevel"
+        [item]="selectedItem"
+        [topleftLat]="topLeftLat ?? 0"
+        [topleftLng]="topLeftLng ?? 0"
+        [bottomrightLat]="bottomRightLat ?? 0"
+        [bottomrightLng]="bottomRightLng ?? 0"
+        [polygonVerticesJson]="building.coordinates.polygonVerticesJson"
+        [rotationAngle]="building.coordinates.rotationAngle ?? 0"
+        (positionChanged)="onMapPositionChanged($event)"
+      >
+      </move-marker-map>
+    </div>
+  </div>
+</div>
+<div class="modal-footer">
+  <button type="button" class="btn btn-default" (click)="onClose()">
+    Close
+  </button>
+</div>

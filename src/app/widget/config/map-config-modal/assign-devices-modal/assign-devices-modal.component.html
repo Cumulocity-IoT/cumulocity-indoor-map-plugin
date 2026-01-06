@@ -1,0 +1,44 @@
+<div class="modal-header separator text-center bg-primary text-white">
+  <h4 class="text-uppercase" style="margin: 0; letter-spacing: 0.15em">
+    {{ "Assign Devices to Floor Plan" }}
+  </h4>
+</div>
+<div class="modal-body">
+  
+    <div class="form-group">
+        <label for="levelDropdown">Select Level</label>
+        <select
+          id="levelDropdown"
+          class="form-control"
+          [(ngModel)]="selectedLevel"
+          (change)="
+            selectedLevel && selectLevel(selectedLevel);
+          "
+        >
+          <option *ngFor="let level of building.levels" [ngValue]="level">
+            {{ level.name }}
+          </option>
+        </select>
+      </div>
+  
+  <div class="row">
+    <ng-container *ngIf="showComponent">
+      <div class="card m-t-16">
+        <div class="card-block p-0 bg-inherit" style="height: 428px">
+          <c8y-asset-selector
+            class="bg-inherit"
+            [(ngModel)]="model"
+            (onSelected)="selectionChanged($event)"
+            [config]="config"
+          ></c8y-asset-selector>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</div>
+<div class="modal-footer">
+  <button type="button" class="btn btn-default" (click)="onCancel()">
+    Cancel
+  </button>
+  <button type="button" class="btn btn-primary" (click)="onSave()">Save</button>
+</div>
