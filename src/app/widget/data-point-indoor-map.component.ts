@@ -378,6 +378,21 @@ export class DataPointIndoorMapComponent
       );
       imageOverlay.addTo(map);
 
+      requestAnimationFrame(() => {
+        imageOverlay.reposition(
+          controlPoints.topleft,
+          controlPoints.topright,
+          controlPoints.bottomleft
+        );
+        setTimeout(() => {
+          imageOverlay.reposition(
+            controlPoints.topleft,
+            controlPoints.topright,
+            controlPoints.bottomleft
+          );
+        }, 50);
+      });
+
       // FIX: Center map on building coordinates with the correct zoom level
       const zoom = this.building?.coordinates.zoomLevel || 18;
       const center = this.getCenterCoordinates(this.building?.coordinates);
@@ -631,6 +646,13 @@ export class DataPointIndoorMapComponent
         }
       );
       imageOverlay.addTo(map);
+
+      requestAnimationFrame(() => {
+        imageOverlay.reposition(topleft, topright, bottomleft);
+        setTimeout(() => {
+          imageOverlay.reposition(topleft, topright, bottomleft);
+        }, 50);
+      });
 
       // FIX: Restore the map view using the captured current center and zoom
       map.setView(currentCenter, currentZoom);
