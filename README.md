@@ -7,13 +7,10 @@ A comprehensive Angular-based widget for visualizing IoT devices and their real-
 ## 🌟 Features
 
 - **📍 Interactive Floor Plans**: Overlay IoT devices on real building floor plans
-- **📊 Real-Time Data Visualization**: Live sensor data with color-coded thresholds  
 - **🏢 Multi-Level Buildings**: Navigate between floors seamlessly
 - **🎯 Zone Management**: Create, edit, and manage functional areas
 - **🔍 Advanced Search & Filtering**: Find devices by name, type, or properties
-- **⚡ Real-Time Updates**: Live measurement updates via WebSocket connections
 - **🎨 Customizable Markers**: Device-specific icons, colors, and labels
-- **📱 Responsive Design**: Works on desktop, tablet, and mobile devices
 
 ## 📚 Documentation
 
@@ -106,13 +103,6 @@ This plugin is built using Cumulocity's module federation architecture:
 - **Threshold Management**: Set up color-coded alerts based on sensor values
 - **Multi-Floor Navigation**: Support for complex building layouts
 
-## 🌐 Browser Support
-
-- ✅ Chrome (Recommended)
-- ✅ Firefox  
-- ✅ Safari
-- ✅ Edge
-- ✅ Mobile browsers (iOS Safari, Android Chrome)
 
 ## 🤝 Contributing
 
@@ -130,10 +120,27 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-- 📖 Check the [User Guide](./docs/USER_GUIDE.md) for common questions
-- 🔧 Review [Technical Documentation](./docs/TECHNICAL_DOCUMENTATION.md) for development issues
-- 🐛 Report bugs via GitHub issues
-- 💬 Join the community forum for discussions
+### 📋 Getting Help
+
+Need assistance? We've got you covered! Choose the best support channel for your needs:
+
+#### 🔍 Self-Service Resources
+- 📖 **[User Guide](./docs/USER_GUIDE.md)** - Step-by-step setup and usage instructions
+- 🔧 **[Technical Documentation](./docs/TECHNICAL_DOCUMENTATION.md)** - Development and integration guides
+- ⚙️ **[Marker Configuration](./docs/MARKER_CONFIGURATION.md)** - Customize device markers and styling
+
+#### 🐛 Issues & Bugs
+- **GitHub Issues** - Report bugs, request features, or ask technical questions
+- **Widget Resize Problems** - If the map doesn't render correctly after resizing, check that you're using the latest version (v1.0.3+)
+
+#### 💬 Community Support
+- **[Cumulocity Community Forum](https://community.cumulocity.com/)** - Connect with other developers, share use cases, and get expert advice
+- **Discussion Topics**: Best practices, implementation tips, integration patterns
+
+#### ⚡ Quick Troubleshooting
+- **Map not loading?** Verify building configuration and image uploads
+- **Devices not showing?** Check device positioning and measurement configurations  
+- **Performance issues?** Review the technical documentation for optimization tips
 
 ## 🔄 Version History
 
