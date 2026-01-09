@@ -15,7 +15,7 @@ import {
 } from "@angular/core";
 import { Router, ActivatedRoute } from "@angular/router";
 import { IManagedObject } from "@c8y/client";
-import { AlertService } from "@c8y/ngx-components";
+import { AlertService, DashboardChildComponent } from "@c8y/ngx-components";
 import {
   MapConfiguration,
   MapConfigurationLevel,
@@ -24,7 +24,7 @@ import {
 } from "../models/data-point-indoor-map.model";
 import type * as L from "leaflet";
 import { MeasurementRealtimeService, Row } from "@c8y/ngx-components";
-import { BehaviorSubject, fromEvent, Subscription, takeUntil } from "rxjs";
+import { BehaviorSubject, fromEvent, Subscription, takeUntil, filter } from "rxjs";
 import { get } from "lodash";
 import { BuildingService } from "../services/building.service";
 import { ImageRotateService } from "../services/image-rotate.service";
@@ -116,8 +116,23 @@ export class DataPointIndoorMapComponent
     private cd: ChangeDetectorRef, // 1. OPTIMIZATION: Inject ChangeDetectorRef
     private router: Router,
     private activatedRoute: ActivatedRoute,
-    private alertService: AlertService
-  ) {}
+    private alertService: AlertService,
+    child: DashboardChildComponent
+  ) {
+    // Handle widget resize events to ensure map renders correctly when widget size changes
+    child.changeEnd
+      .pipe(
+        filter((child) => child.lastChange === 'resize'),
+        takeUntil(this.destroy$)
+      )
+      .subscribe(() => {
+        // Invalidate map size to trigger proper re-rendering when widget is resized
+        if (this.map) {
+          this.map.invalidateSize();
+          this.cd.markForCheck(); // Trigger change detection after resize
+        }
+      });
+  }
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes["config"] && changes["config"].currentValue) {
