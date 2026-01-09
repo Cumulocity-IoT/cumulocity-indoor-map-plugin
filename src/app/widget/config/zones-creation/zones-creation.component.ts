@@ -138,69 +138,39 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     | { topleft: L.LatLng; topright: L.LatLng; bottomleft: L.LatLng }
     | undefined {
     const coords = this.initialConfig.coordinates;
-    if (!coords) return undefined;
+    if (!coords?.polygonVerticesJson) return undefined;
 
-    if (coords.polygonVerticesJson) {
-      try {
-        const polygonData = JSON.parse(coords.polygonVerticesJson);
-        const ring = Array.isArray(polygonData[0])
-          ? polygonData[0]
-          : polygonData;
+    try {
+      const polygonData = JSON.parse(coords.polygonVerticesJson);
+      const vertices = Array.isArray(polygonData[0])
+        ? polygonData[0]
+        : polygonData;
 
-        if (ring && ring.length >= 4) {
-          // Stable sorting to prevent flipping
-          // 1. Sort by Latitude (North to South)
-          const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
-
-          // 2. Take top 2 (North-most) and sort by Longitude (West to East) -> TL, TR
-          const topTwo = [sortedByLat[0], sortedByLat[1]].sort(
-            (a, b) => a.lng - b.lng
-          );
-          const tl = topTwo[0];
-          const tr = topTwo[1];
-
-          // 3. Find remaining points
-          const remaining = ring.filter(
-            (p: any) =>
-              (p.lat !== tl.lat || p.lng !== tl.lng) &&
-              (p.lat !== tr.lat || p.lng !== tr.lng)
-          );
-
-          // 4. Sort remaining by Longitude -> BL (left-most of bottom set)
-          const bl =
-            remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
-
-          return {
-            topleft: L.latLng(tl.lat, tl.lng),
-            topright: L.latLng(tr.lat, tr.lng),
-            bottomleft: L.latLng(bl.lat, bl.lng),
-          };
-        }
-      } catch (e) {
-        console.error("Failed to parse polygonVerticesJson for overlay:", e);
+      if (vertices && vertices.length >= 4) {
+        // Use the Coordinate Lock from DataPointIndoorMapComponent
+        // 0: TL, 1: TR, 3: BL
+        return {
+          topleft: L.latLng(vertices[0].lat, vertices[0].lng),
+          topright: L.latLng(vertices[1].lat, vertices[1].lng),
+          bottomleft: L.latLng(vertices[3].lat, vertices[3].lng),
+        };
       }
+    } catch (e) {
+      console.error("Failed to parse polygon vertices:", e);
     }
-
-    const topLat = coords.topLeftLat ?? 0;
-    const leftLng = coords.topLeftLng ?? 0;
-    const bottomLat = coords.bottomRightLat ?? 0;
-    const rightLng = coords.bottomRightLng ?? 0;
-
-    return {
-      topleft: L.latLng(topLat, leftLng),
-      topright: L.latLng(topLat, rightLng),
-      bottomleft: L.latLng(bottomLat, leftLng),
-    };
+    return undefined;
   }
 
   private async initMap() {
-    const initialBounds = this.imageBounds();
-    const bounds = this.getLeafletBounds(initialBounds);
     const currentLevelConfig =
       this.initialConfig.levels?.[this.currentFloorLevel];
+    const controlPoints = this.getValidatedControlPoints();
+    const coords = this.initialConfig.coordinates;
 
+    // Initialize map centered on config or default center
+    const initialCenter = this.getCenterCoordinates(coords);
     this.map = L.map(this.mapReference.nativeElement, {
-      center: bounds?.getCenter() || [51.227, 6.773],
+      center: initialCenter,
       zoom: this.currentZoomLevel,
     });
 
@@ -213,29 +183,22 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.initGeomanControl();
 
-    if (currentLevelConfig?.binaryId && bounds) {
+    if (currentLevelConfig?.binaryId && controlPoints) {
       await this.placeImageOverlay(currentLevelConfig.binaryId);
-    }
 
-    // Draw zones after initialization
-    setTimeout(() => {
-      if (this.map) {
-        this.map.invalidateSize();
-        this.drawSavedZones();
-        this.centerMapOnBounds();
+      // Logic check for image type to determine positioning
+      const isSvg = currentLevelConfig["fileName"]
+        ?.toLowerCase()
+        .endsWith(".svg");
+
+      if (isSvg) {
+        // SVGs require fitBounds to lock the pixel-origin
+        const layerBounds = this.imageOverlayLayer!.getBounds();
+        this.map.fitBounds(layerBounds, { padding: [20, 20] });
+      } else {
+        // Raster images use the configured zoom and center
+        this.map.setView(initialCenter, this.currentZoomLevel);
       }
-    }, 100);
-  }
-
-  // --- NEW HELPER: Forces update of 3-point positioning ---
-  private updateImageOverlayPosition(): void {
-    if (!this.imageOverlayLayer) return;
-    const cp = this.getValidatedControlPoints();
-    if (!cp) return;
-
-    const layerAny = this.imageOverlayLayer as any;
-    if (typeof layerAny.reposition === "function") {
-      layerAny.reposition(cp.topleft, cp.topright, cp.bottomleft);
     }
   }
 
@@ -243,55 +206,52 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     const controlPoints = this.getValidatedControlPoints();
     if (!controlPoints) return;
 
-    try {
-      const imgSource = URL.createObjectURL(await this.getImage(binaryId));
-      const imageOverlayFactory = (L.imageOverlay as any).rotated;
+    const blob = await this.getImage(binaryId);
+    const imgSource = URL.createObjectURL(blob);
+    const imageOverlayFactory = (L.imageOverlay as any).rotated;
 
-      if (imageOverlayFactory) {
-        this.imageOverlayLayer = imageOverlayFactory(
-          imgSource,
+    if (imageOverlayFactory) {
+      this.imageOverlayLayer = imageOverlayFactory(
+        imgSource,
+        controlPoints.topleft,
+        controlPoints.topright,
+        controlPoints.bottomleft,
+        { opacity: 1, interactive: true }
+      );
+
+      this.imageOverlayLayer!.addTo(this.map!);
+
+      // High-precision repositioning sequence
+      requestAnimationFrame(() => {
+        (this.imageOverlayLayer as any)?.reposition(
           controlPoints.topleft,
           controlPoints.topright,
-          controlPoints.bottomleft,
-          {
-            opacity: 1,
-            interactive: true,
-            crossOrigin: "anonymous", // Critical for SVG rendering at high zoom
-          }
+          controlPoints.bottomleft
         );
-
-        // --- FIX: Attach Load Listener ---
-        this.imageOverlayLayer!.on("load", () => {
-          // Force repositioning once the browser knows the image dimensions
-          this.updateImageOverlayPosition();
-        });
-
-        // --- FIX: Add using requestAnimationFrame ---
-        requestAnimationFrame(() => {
-          if (this.imageOverlayLayer && this.map) {
-            this.imageOverlayLayer.addTo(this.map);
-            this.updateImageOverlayPosition();
-          }
-        });
-
-        // Use the actual layer bounds to fit the map
-        // We delay this slightly to ensure the layer is added
         setTimeout(() => {
-          if (this.imageOverlayLayer && this.map) {
-            const layerBounds = this.imageOverlayLayer.getBounds();
-            this.map.fitBounds(layerBounds);
-          }
+          (this.imageOverlayLayer as any)?.reposition(
+            controlPoints.topleft,
+            controlPoints.topright,
+            controlPoints.bottomleft
+          );
         }, 50);
-      } else {
-        // Fallback logic
-        const bounds = this.getLeafletBounds(this.imageBounds());
-        this.imageOverlayLayer = L.imageOverlay(imgSource, bounds!, {
-          opacity: 1,
-        });
-        this.imageOverlayLayer.addTo(this.map!);
-      }
-    } catch (error) {
-      console.error("Failed to place image overlay:", error);
+      });
+    }
+  }
+
+  getCenterCoordinates(coordinates: any): [number, number] {
+    if (coordinates) {
+      const topLeftLat = coordinates.topLeftLat ?? 0;
+      const bottomRightLat = coordinates.bottomRightLat ?? 0;
+      const topLeftLng = coordinates.topLeftLng ?? 0;
+      const bottomRightLng = coordinates.bottomRightLng ?? 0;
+
+      const centerLat = (topLeftLat + bottomRightLat) / 2;
+      const centerLng = (topLeftLng + bottomRightLng) / 2;
+
+      return [centerLat, centerLng];
+    } else {
+      return [51.23544, 6.79599];
     }
   }
 
