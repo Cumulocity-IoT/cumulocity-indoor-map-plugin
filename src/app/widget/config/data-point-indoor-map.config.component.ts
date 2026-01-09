@@ -28,11 +28,7 @@ import { IManagedObject } from "@c8y/client";
   selector: "data-point-indoor-map-configuration",
   templateUrl: "./data-point-indoor-map.config.component.html",
   styleUrls: ["./data-point-indoor-map.config.component.less"],
-  providers: [
-    BuildingService,
-    AlertService,
-    MeasurementRealtimeService,
-  ],
+  providers: [BuildingService, AlertService, MeasurementRealtimeService],
 })
 export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
   @Input() config!: WidgetConfiguration;
@@ -109,7 +105,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       this.selectedMapConfigurationId = undefined;
       this.showCreateOption = true;
     }
-  } 
+  }
 
   onMapConfigurationSelected(event: TypeaheadMatch): void {
     const selected: MapConfiguration = event.item;
@@ -118,7 +114,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     this.selectedBuilding = selected;
     this.showCreateOption = false;
     this.onMapConfigurationChanged();
-  } 
+  }
 
   createNewMapConfiguration(): void {
     if (!this.mapConfigInput.trim()) return;
@@ -143,7 +139,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
       }
     });
     this.showCreateOption = false;
-  } 
+  }
 
   async onMapConfigurationChanged(): Promise<void> {
     if (!this.selectedMapConfigurationId) return;
@@ -218,8 +214,14 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     });
   }
 
-  onEditDeviceLocation(): void {
+  async onEditDeviceLocation(): Promise<void> {
     if (!this.selectedBuilding) return;
+    if (isEmpty(this.managedObjectsForFloorLevels)) {
+      this.managedObjectsForFloorLevels =
+        await this.buildingService.loadMarkersForLevels(
+          this.selectedBuilding.levels
+        );
+    }
     this.modalService.show(AssignLocationModalComponent, {
       initialState: {
         building: this.selectedBuilding,
@@ -283,7 +285,6 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
     });
   }
 
-
   private initMapConfigurations(): void {
     this.buildingService
       .loadSmartMapConfigurations()
@@ -310,7 +311,7 @@ export class DataPointIndoorMapConfigComponent implements OnInit, OnBeforeSave {
                 fullConfig.levels
               );
 
-            this.selectedBuilding = fullConfig; 
+            this.selectedBuilding = fullConfig;
           } catch {
             this.onMapConfigurationChanged();
           }
