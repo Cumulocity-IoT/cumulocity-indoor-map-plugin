@@ -17,9 +17,6 @@ A comprehensive Angular-based widget for visualizing IoT devices and their real-
 ### 📖 [User Guide](./docs/USER_GUIDE.md)
 Complete guide for end-users covering setup, configuration, and daily usage.
 
-### 🔧 [Technical Documentation](./docs/TECHNICAL_DOCUMENTATION.md)  
-Comprehensive technical documentation for developers and administrators.
-
 ### ⚙️ [Marker Configuration Guide](./docs/MARKER_CONFIGURATION.md)
 Detailed guide for customizing device marker appearance and behavior.
 
@@ -137,18 +134,13 @@ Need assistance? We've got you covered! Choose the best support channel for your
 - **[Cumulocity Community Forum](https://community.cumulocity.com/)** - Connect with other developers, share use cases, and get expert advice
 - **Discussion Topics**: Best practices, implementation tips, integration patterns
 
-#### ⚡ Quick Troubleshooting
-- **Map not loading?** Verify building configuration and image uploads
-- **Devices not showing?** Check device positioning and measurement configurations  
-- **Performance issues?** Review the technical documentation for optimization tips
+
 
 ## 🔄 Version History
 
 - **v1.0.3**: Current stable release
   - Multi-level building support
   - Enhanced zone management
-  - Improved real-time performance
-  - Mobile responsiveness
 
 ## 🙏 Acknowledgments
 
