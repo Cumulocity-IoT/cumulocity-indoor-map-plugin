@@ -8,7 +8,6 @@
 4. [Widget Configuration](#widget-configuration)
 5. [Device Management](#device-management)
 6. [Zone Management](#zone-management)
-7. [Real-Time Data Monitoring](#real-time-data-monitoring)
 8. [Advanced Features](#advanced-features)
 9. [Troubleshooting](#troubleshooting)
 
@@ -19,7 +18,6 @@ The Cumulocity Indoor Map Plugin transforms how you visualize and monitor your I
 ### What You Can Do
 
 ✅ **Visualize Device Locations**: See exactly where your IoT devices are positioned on real floor plans  
-✅ **Monitor Real-Time Data**: Watch live sensor readings and status updates  
 ✅ **Create Custom Zones**: Define areas for grouping and analysis  
 ✅ **Set Visual Alerts**: Configure color-coded thresholds for instant status recognition  
 ✅ **Navigate Multi-Level Buildings**: Seamlessly switch between floors  
@@ -60,11 +58,9 @@ Upon adding the widget, you'll be prompted to configure it. The configuration pr
 1. In the widget configuration, click **"Create New Building"**
 2. **Fill in building details**:
    - **Building Name**: Enter a descriptive name (e.g., "Corporate Headquarters")
-   - **Location**: Set geographical coordinates (optional but recommended)
-   - **Description**: Add any relevant details
 
 3. **Configure building coordinates** (for precise mapping):
-   - **Latitude/Longitude**: GPS coordinates of the building
+   - **Latitude/Longitude**: Set GPS coordinates of the building via map 
    - **Zoom Level**: Default zoom when loading the map
    - **Rotation Angle**: If your floor plan needs rotation to align with true north
 
@@ -79,15 +75,10 @@ Upon adding the widget, you'll be prompted to configure it. The configuration pr
    - Click **"Upload Floor Plan"**
    - Select your floor plan file (PNG, JPG, or SVG)
    - **Image requirements**:
-     - Maximum file size: 10MB
-     - Recommended resolution: 1920x1080 or higher
      - Clear, high-contrast images work best
 
-4. **Set image coordinates**:
-   - Define the real-world boundaries of your floor plan
-   - Mark corner coordinates to establish scale
-
-### Device Assignment
+#### Device Assignment
+- Assign or unassign one or multiple devices to a selected floor plan 
 
 #### Positioning Devices on the Map
 
@@ -106,13 +97,6 @@ Upon adding the widget, you'll be prompted to configure it. The configuration pr
    - Markers show device names and types
    - Colors indicate current status or measurement values
 
-#### Bulk Device Assignment
-
-For multiple devices:
-
-1. Use the **"Auto-assign"** feature (if available)
-2. Upload a CSV file with device IDs and coordinates
-3. Use the **batch positioning tool** for similar device types
 
 ## Widget Configuration
 
