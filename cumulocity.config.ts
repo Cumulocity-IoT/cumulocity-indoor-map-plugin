@@ -21,7 +21,8 @@ export default {
         name: "Indoor Map Widget plugin",
         module: "DataPointIndoorMapModule",
         path: "./src/app/widget/data-point-indoor-map.module.ts",
-        description: "Display markers on a indoor map and their datapoints",
+        description:
+          "Visualizing IoT devices and their real-time data on interactive indoor floor plans within the Cumulocity IoT platform",
       },
     ],
   },

@@ -112,7 +112,7 @@
     </c8y-form-group>
 
     <c8y-form-group>
-      <label>Edit Device Locations</label>
+      <label>Edit Devices Location</label>
       <p class="small">
         Select a device and set its exact position on the map image.
       </p>
@@ -121,7 +121,7 @@
         class="btn btn-default btn-block"
         (click)="onEditDeviceLocation()"
       >
-        <i c8yIcon="map-marker" class="c8y-icon"></i> Edit Device Location
+        <i c8yIcon="map-marker" class="c8y-icon"></i> Edit Devices Location
       </button>
     </c8y-form-group>
 
@@ -136,7 +136,13 @@
         (click)="openColumnConfigModal()"
       >
         <i c8yIcon="table" class="c8y-icon"></i> Configure Columns
-        <span *ngIf="config && config.columnConfig && config.columnConfig.length > 0" class="text-success pull-right" [title]="(config.columnConfig?.length || 0) + ' columns configured'">
+        <span
+          *ngIf="
+            config && config.columnConfig && config.columnConfig.length > 0
+          "
+          class="text-success pull-right"
+          [title]="(config.columnConfig?.length || 0) + ' columns configured'"
+        >
           <i c8yIcon="check-circle"></i>
         </span>
       </button>

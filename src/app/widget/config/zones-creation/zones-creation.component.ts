@@ -255,6 +255,26 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  private enableLayerEditing(layer: any, rotation?: number): void {
+    if (!layer.pm) return;
+
+    // Apply saved rotation first if exists
+    if (rotation) {
+      if (layer.pm.setInitAngle) {
+        layer.pm.setInitAngle(rotation);
+      }
+      if (layer.pm.rotateLayerToAngle) {
+        layer.pm.rotateLayerToAngle(rotation);
+      }
+    }
+
+    // Enable edit mode with rotation support
+    layer.pm.enable({
+      allowSelfIntersection: false,
+      allowRotation: true,
+    });
+  }
+
   private drawSavedZones(): void {
     if (!this.map) return;
 
@@ -272,9 +292,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     currentZones.forEach((zone: any, index: number) => {
-      if (!zone.geometry) {
-        return;
-      }
+      if (!zone.geometry) return;
 
       try {
         const layer = L.geoJSON(zone.geometry);
@@ -288,15 +306,7 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
           }
 
           this.zoneFeatureGroup!.addLayer(vectorLayer);
-
-          (vectorLayer as any).pm.enable({
-            allowSelfIntersection: false,
-            rotate: true,
-          });
-
-          if (zone.rotation && (vectorLayer as any).setRotation) {
-            (vectorLayer as any).setRotation(zone.rotation);
-          }
+          this.enableLayerEditing(vectorLayer, zone.rotation);
         });
       } catch (error) {
         console.error(`Failed to create layer for zone ${index}:`, error);
@@ -343,25 +353,25 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     mapWithPm.on("pm:create", (e: any) => {
       const layer = e.layer;
       this.zoneFeatureGroup?.addLayer(layer);
-      layer.pm.enable({ allowSelfIntersection: false, rotate: true });
+      this.enableLayerEditing(layer);
       this.updateZonesState();
     });
 
     mapWithPm.on("pm:remove", (e: any) => {
       this.zoneFeatureGroup!.removeLayer(e.layer);
-      setTimeout(() => {
-        this.updateZonesState();
-      }, 50);
+      requestAnimationFrame(() => this.updateZonesState());
     });
 
-    mapWithPm.on("pm:edit pm:dragend", (e: any) => {
+    mapWithPm.on("pm:edit", () => {
       this.updateZonesState();
     });
 
-    mapWithPm.on("pm:rotateend", (e: any) => {
-      setTimeout(() => {
-        this.updateZonesState();
-      }, 0);
+    mapWithPm.on("pm:dragend", () => {
+      this.updateZonesState();
+    });
+
+    mapWithPm.on("pm:rotateend", () => {
+      this.updateZonesState();
     });
   }
 
@@ -433,16 +443,10 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const currentZones: any[] = [];
     this.zoneFeatureGroup.eachLayer((layer: any) => {
-      if (layer.toGeoJSON) {
+      if (layer.toGeoJSON && layer.pm) {
         const geoJson = layer.toGeoJSON();
-        let rotationAngle = 0;
-
-        rotationAngle = layer.options.rotation || 0;
-
-        if (rotationAngle === 0 && layer.pm) {
-          rotationAngle =
-            (layer.pm as any)._rotation || (layer.pm as any)._rotateAngle || 0;
-        }
+        // Use the proper geoman API method to get rotation angle
+        const rotationAngle = layer.pm.getAngle ? layer.pm.getAngle() : 0;
 
         currentZones.push({
           geometry: geoJson.geometry,
@@ -454,8 +458,6 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
     this.zones.set(currentZones);
     const currentLevelIndex = this.currentFloorLevel.toString();
     this.allZonesByLevel[currentLevelIndex] = JSON.stringify(currentZones);
-
-    //this.emitConfigChange(null);
   }
 
   private emitConfigChange(payload: any): void {
@@ -482,9 +484,35 @@ export class ZonesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
   ngOnDestroy(): void {
     if (this.map) {
-      (this.map as any).pm.removeControls();
+      const mapWithPm = this.map as any;
+      
+      // Remove all geoman event listeners
+      mapWithPm.off("pm:create");
+      mapWithPm.off("pm:remove");
+      mapWithPm.off("pm:edit");
+      mapWithPm.off("pm:dragend");
+      mapWithPm.off("pm:rotateend");
+      
+      // Remove geoman controls
+      if (mapWithPm.pm) {
+        mapWithPm.pm.removeControls();
+      }
+      
+      // Clean up feature group
+      if (this.zoneFeatureGroup) {
+        this.zoneFeatureGroup.clearLayers();
+        this.map.removeLayer(this.zoneFeatureGroup);
+      }
+      
+      // Clean up image overlay
+      if (this.imageOverlayLayer) {
+        this.map.removeLayer(this.imageOverlayLayer);
+      }
+      
+      // Remove all event listeners and the map
       this.map.off();
       this.map.remove();
+      this.map = undefined;
     }
   }
 

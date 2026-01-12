@@ -1,6 +1,6 @@
 {
   "author": "PS",
-  "description": "Display markers on a indoor map and their datapoints",
+  "description": "Visualizing IoT devices and their real-time data on interactive indoor floor plans within the Cumulocity IoT platform",
   "name": "cumulocity-indoor-map",
   "version": "1.0.3",
   "scripts": {

@@ -62,6 +62,11 @@ export class MoveMarkerMapComponent
   }
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
+    // If imageBlob changes and map hasn't been initialized yet, initialize now
+    if (changes["imageBlob"] && this.imageBlob && !this.map) {
+      await this.initializeMap();
+    }
+
     await this.waitForMapInitialization();
 
     if (
@@ -83,9 +88,24 @@ export class MoveMarkerMapComponent
   }
 
   async ngAfterViewInit() {
+    // Only initialize map if imageBlob is already available
+    if (this.imageBlob) {
+      await this.initializeMap();
+    }
+  }
+
+  private async initializeMap(): Promise<void> {
+    if (this.map) return; // Already initialized
+
     const l = await this.leaf;
     this.imageRotateService.initialize(l);
-    const map = l.map(this.mapReference.nativeElement, {});
+
+    // Initialize map with center and zoom
+    const initialCenter = this.getCenterCoordinates();
+    const map = l.map(this.mapReference.nativeElement, {
+      center: initialCenter,
+      zoom: this.zoomLevel || 18,
+    });
     this.map = map;
 
     // Setup Tile Layer
@@ -98,10 +118,6 @@ export class MoveMarkerMapComponent
     }).addTo(map);
 
     await this.updateImageOverlay();
-
-    const center = this.getCenterCoordinates();
-    const zoom = this.zoomLevel || 18;
-    map.setView(center, zoom);
 
     this.setupMarkerAndClickListener(l, map);
 
@@ -214,28 +230,36 @@ export class MoveMarkerMapComponent
               controlPoints.topright,
               controlPoints.bottomleft
             );
+
+            // Set view after repositioning completes
+            if (this.imageLayer) {
+              const layerBounds = this.imageLayer.getBounds();
+              if (layerBounds && layerBounds.isValid()) {
+                if (this.imageBlob!.type === "image/svg+xml") {
+                  this.map!.fitBounds(layerBounds, {
+                    padding: [20, 20],
+                  });
+                } else {
+                  this.map!.setView(layerBounds.getCenter(), this.zoomLevel);
+                }
+              }
+            }
           }, 50);
         });
-
-        // --- CONDITIONAL VIEW LOGIC ---
-        // Check if image is SVG via Blob type
-        if (this.imageLayer) {
-          if (this.imageBlob.type === "image/svg+xml") {
-            this.map.fitBounds(this.imageLayer.getBounds(), {
-              padding: [20, 20],
-            });
-          } else {
-            const bounds = this.imageLayer.getBounds();
-            this.map.setView(bounds.getCenter(), this.zoomLevel);
-          }
-        }
       } else {
         const bounds = this.calculateBounds(l);
         this.imageLayer = l
           .imageOverlay(imgBlobURL, bounds, { opacity: 1 })
           .addTo(this.map);
-        this.map.fitBounds(bounds);
+        if (bounds.isValid()) {
+          this.map.fitBounds(bounds);
+        }
       }
+    } else {
+      // No image blob, set default view
+      const center = this.getCenterCoordinates();
+      const zoom = this.zoomLevel || 18;
+      this.map.setView(center, zoom);
     }
   }
   /**
