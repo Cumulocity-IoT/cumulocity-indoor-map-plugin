@@ -91,13 +91,11 @@ This plugin is built using Cumulocity's module federation architecture:
 2. Create or select a building configuration
 3. Upload floor plan images
 4. Position your IoT devices on the map
-5. Configure measurements and thresholds
 
 ### Advanced Features
 
 - **Zone Creation**: Define functional areas on floor plans
 - **Custom Markers**: Use `c8y_marker` fragment for device customization
-- **Threshold Management**: Set up color-coded alerts based on sensor values
 - **Multi-Floor Navigation**: Support for complex building layouts
 
 
