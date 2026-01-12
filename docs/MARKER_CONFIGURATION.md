@@ -70,27 +70,12 @@ Color of the icon inside the marker (CSS color value).
 
 **Default:** `#FFFFFF` (white) or calculated color based on measurements
 
-**Examples:**
-```json
-"c8y_marker": {
-  "icon_color": "#FF0000",        // Red
-  "icon_color": "#00FF00",        // Green  
-  "icon_color": "rgb(255,0,0)",   // RGB notation
-  "icon_color": "red"             // Named color
-}
-```
 
 #### `icon_size` (array, optional)
 Size of the icon in pixels `[width, height]`.
 
 **Default:** `[24, 24]` or widget configuration default
 
-**Example:**
-```json
-"c8y_marker": {
-  "icon_size": [32, 32]
-}
-```
 
 ### 🎨 Marker Styling
 
@@ -99,24 +84,11 @@ Background color of the marker circle.
 
 **Default:** `#000000` (black)
 
-**Example:**
-```json
-"c8y_marker": {
-  "color": "#2196F3"  // Material Blue
-}
-```
-
 #### `size` (number, optional)
 Diameter of the marker circle in pixels.
 
 **Default:** `36`
 
-**Example:**
-```json
-"c8y_marker": {
-  "size": 48
-}
-```
 
 ### 🏷️ Label Configuration
 
@@ -124,16 +96,11 @@ Diameter of the marker circle in pixels.
 Custom text displayed below the marker.
 
 **Default Behavior** (if label not specified):
-1. Device name (truncated to 20 characters)
+1. Device name 
 2. Device type 
 3. Device ID
 
-**Example:**
-```json
-"c8y_marker": {
-  "label": "Sensor A1"
-}
-```
+
 
 **Advanced Label Examples:**
 ```json
@@ -288,106 +255,3 @@ The widget automatically maps device types to appropriate icons:
 - `c8y_MotionSensor` → `eye`
 - `c8y_Gateway` → `router`
 
-### Fallback Behavior
-1. Use `c8y_marker.icon` if specified
-2. Auto-detect from device type
-3. Use widget default icon
-4. Use `location` as final fallback
-
-## Best Practices
-
-### 🎨 Visual Consistency
-- Use consistent color schemes across similar device types
-- Maintain readable contrast between icon and background colors
-- Keep marker sizes proportional to map zoom levels
-
-### 🏷️ Label Guidelines  
-- Keep labels concise (under 15 characters for best display)
-- Use meaningful identifiers (zone names, equipment IDs)
-- Consider using empty string `""` to hide labels when not needed
-
-### 💭 Popup Content
-- Use semantic HTML structure
-- Include relevant operational information
-- Keep content scannable with clear hierarchy
-- Test popup content at different screen sizes
-
-### 🎯 Performance Considerations
-- Avoid overly complex HTML in popup content
-- Use CSS classes instead of extensive inline styles when possible
-- Consider marker density when choosing sizes
-
-## Troubleshooting
-
-### Marker Not Appearing
-- Verify `c8y_Position` fragment is present and valid
-- Check that latitude/longitude values are within map bounds
-- Ensure device is assigned to correct floor level
-
-### Icon Not Displaying  
-- Verify icon name is valid Cumulocity icon (without prefix)
-- Check icon_color has sufficient contrast
-- Ensure icon_size is reasonable (minimum 16x16 pixels)
-
-### Label Issues
-- Labels may be truncated on smaller markers
-- Very long labels may overlap with nearby markers
-- Empty or whitespace-only labels will use default fallback
-
-### Popup Problems
-- Malformed HTML may break popup rendering
-- Excessive content may cause performance issues
-- Interactive elements in popups require proper event handling
-
-## Migration Guide
-
-### From Basic Markers
-If you currently have devices without `c8y_marker` configuration:
-
-1. **Add basic styling:**
-   ```json
-   "c8y_marker": {
-     "icon": "device",
-     "color": "#1976D2"
-   }
-   ```
-
-2. **Add meaningful labels:**
-   ```json 
-   "c8y_marker": {
-     "label": "Zone A1"
-   }
-   ```
-
-3. **Enhanced popups:**
-   ```json
-   "c8y_marker": {
-     "popup": "<strong>Equipment ID:</strong> EQ-001<br/><strong>Status:</strong> Operational"
-   }
-   ```
-
-### Updating Existing Configurations
-Use the Cumulocity Inventory API to bulk update managed objects:
-
-```javascript
-// Example: Update multiple devices with new marker styling
-const devices = await client.inventory.list({
-  type: 'c8y_TemperatureSensor'
-});
-
-for (const device of devices.data) {
-  await client.inventory.update({
-    id: device.id,
-    c8y_marker: {
-      icon: 'thermometer',
-      icon_color: '#FFFFFF', 
-      color: '#F44336',
-      size: 40
-    }
-  });
-}
-```
-
----
-
-For additional support or feature requests, please refer to the widget documentation or contact the development team.

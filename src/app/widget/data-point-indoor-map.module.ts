@@ -54,14 +54,14 @@ import { ColumnConfigModalComponent } from "./config/column-config-modal/column-
     MapDataGridComponent,
     AssetSelectorModule,
     TypeaheadModule.forRoot(),
-    PSAutoRefreshComponent
-],
+    PSAutoRefreshComponent,
+  ],
   providers: [
     hookWidget({
       id: "indoor-data-point-map-widget",
       label: gettext("Indoor Map Widget"),
       description: gettext(
-        "Display markers on a indoor map and their datapoints"
+        "Visualizing IoT devices and their real-time data on interactive indoor floor plans within the Cumulocity IoT platform"
       ),
       data: {
         settings: {

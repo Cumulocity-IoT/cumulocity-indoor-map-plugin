@@ -15,6 +15,7 @@ import {
 import { CoreModule } from "@c8y/ngx-components";
 import type * as L from "leaflet";
 import { MarkerManagedObject } from "../../../../models/data-point-indoor-map.model";
+import { ImageRotateService } from "../../../../services/image-rotate.service";
 
 // Define the structure of the position data being emitted
 interface PositionData {
@@ -54,13 +55,18 @@ export class MoveMarkerMapComponent
   @ViewChild("markerMap", { read: ElementRef, static: true })
   mapReference!: ElementRef;
   private readonly MAX_ZOOM = 23;
-  constructor() {}
+  constructor(private imageRotateService: ImageRotateService) {}
 
   async ngOnInit() {
     this.leaf = import("leaflet");
   }
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
+    // If imageBlob changes and map hasn't been initialized yet, initialize now
+    if (changes["imageBlob"] && this.imageBlob && !this.map) {
+      await this.initializeMap();
+    }
+
     await this.waitForMapInitialization();
 
     if (
@@ -82,8 +88,24 @@ export class MoveMarkerMapComponent
   }
 
   async ngAfterViewInit() {
+    // Only initialize map if imageBlob is already available
+    if (this.imageBlob) {
+      await this.initializeMap();
+    }
+  }
+
+  private async initializeMap(): Promise<void> {
+    if (this.map) return; // Already initialized
+
     const l = await this.leaf;
-    const map = l.map(this.mapReference.nativeElement, {});
+    this.imageRotateService.initialize(l);
+
+    // Initialize map with center and zoom
+    const initialCenter = this.getCenterCoordinates();
+    const map = l.map(this.mapReference.nativeElement, {
+      center: initialCenter,
+      zoom: this.zoomLevel || 18,
+    });
     this.map = map;
 
     // Setup Tile Layer
@@ -97,20 +119,28 @@ export class MoveMarkerMapComponent
 
     await this.updateImageOverlay();
 
-    const bounds = this.calculateBounds(l);
-
-    const hasValidBounds = this.topleftLat !== 51.52 && this.topleftLat !== 0;
-
-    if (hasValidBounds) {
-      map.setView(bounds.getCenter(), this.zoomLevel);
-      map.fitBounds(bounds);
-    } else {
-      map.setView([51.227, 6.773], this.zoomLevel);
-    }
-
     this.setupMarkerAndClickListener(l, map);
 
     this.redrawMap(true);
+  }
+
+  getCenterCoordinates(): [number, number] {
+    if (
+      (this.topleftLat !== 51.52 && this.topleftLat !== 0) ||
+      (this.topleftLng !== -0.12 && this.topleftLng !== 0)
+    ) {
+      const topLeftLat = this.topleftLat ?? 0;
+      const bottomRightLat = this.bottomrightLat ?? 0;
+      const topLeftLng = this.topleftLng ?? 0;
+      const bottomRightLng = this.bottomrightLng ?? 0;
+
+      const centerLat = (topLeftLat + bottomRightLat) / 2;
+      const centerLng = (topLeftLng + bottomRightLng) / 2;
+
+      return [centerLat, centerLng];
+    } else {
+      return [51.23544, 6.79599];
+    }
   }
 
   private calculateBounds(l: typeof L): L.LatLngBounds {
@@ -124,37 +154,24 @@ export class MoveMarkerMapComponent
   ):
     | { topleft: L.LatLng; topright: L.LatLng; bottomleft: L.LatLng }
     | undefined {
-    // 1. Prioritize true Polygon vertices (handles tilt/skew)
     if (this.polygonVerticesJson) {
       try {
         const polygonData = JSON.parse(this.polygonVerticesJson);
-        // Geoman usually saves as a nested array [[p1, p2, p3, p4]]
         const ring = Array.isArray(polygonData[0])
           ? polygonData[0]
           : polygonData;
 
         if (ring && ring.length >= 4) {
-          // Geometric Sort: Find TL, TR, and BL regardless of vertex order
-          const sortedByLat = [...ring].sort((a, b) => b.lat - a.lat);
-          const topTwo = [sortedByLat[0], sortedByLat[1]].sort(
-            (a, b) => a.lng - b.lng
-          );
-
-          const tl = topTwo[0]; // Most Northern + Most Western
-          const tr = topTwo[1]; // Most Northern + Most Eastern
-
-          const remaining = ring.filter(
-            (p: any) =>
-              (p.lat !== tl.lat || p.lng !== tl.lng) &&
-              (p.lat !== tr.lat || p.lng !== tr.lng)
-          );
-          const bl =
-            remaining[0].lng < remaining[1].lng ? remaining[0] : remaining[1];
+          // COORDINATE LOCK:
+          // GPSComponent now saves in order: 0:TL, 1:TR, 2:BR, 3:BL
+          const V1 = ring[0]; // Top-Left
+          const V2 = ring[1]; // Top-Right
+          const V4 = ring[3]; // Bottom-Left
 
           return {
-            topleft: l.latLng(tl.lat, tl.lng),
-            topright: l.latLng(tr.lat, tr.lng),
-            bottomleft: l.latLng(bl.lat, bl.lng),
+            topleft: l.latLng(V1.lat, V1.lng),
+            topright: l.latLng(V2.lat, V2.lng),
+            bottomleft: l.latLng(V4.lat, V4.lng),
           };
         }
       } catch (e) {
@@ -162,16 +179,14 @@ export class MoveMarkerMapComponent
       }
     }
 
-    // 2. Fallback: Use standard AABB corners if no rotation is present
+    // Fallback for non-rotated rectangles
     if (
       !this.topleftLat ||
       !this.topleftLng ||
       !this.bottomrightLat ||
       !this.bottomrightLng
-    ) {
+    )
       return undefined;
-    }
-
     return {
       topleft: l.latLng(this.topleftLat, this.topleftLng),
       topright: l.latLng(this.topleftLat, this.bottomrightLng),
@@ -181,10 +196,8 @@ export class MoveMarkerMapComponent
 
   private async updateImageOverlay(): Promise<void> {
     if (!this.map || !this.topleftLat || !this.topleftLng) return;
-
     const l = await this.leaf;
 
-    // Cleanup existing layer
     if (this.imageLayer) {
       this.map.removeLayer(this.imageLayer);
       this.imageLayer = undefined;
@@ -196,7 +209,6 @@ export class MoveMarkerMapComponent
       const rotatedFactory = (l.imageOverlay as any).rotated;
 
       if (rotatedFactory && controlPoints) {
-        // Use the three-point anchor system for real-time tilt alignment
         this.imageLayer = rotatedFactory(
           imgBlobURL,
           controlPoints.topleft,
@@ -205,6 +217,7 @@ export class MoveMarkerMapComponent
           { opacity: 1, interactive: true }
         ).addTo(this.map);
 
+        // --- MATCHED REPOSITIONING CYCLE ---
         requestAnimationFrame(() => {
           (this.imageLayer as any).reposition(
             controlPoints.topleft,
@@ -217,24 +230,38 @@ export class MoveMarkerMapComponent
               controlPoints.topright,
               controlPoints.bottomleft
             );
+
+            // Set view after repositioning completes
+            if (this.imageLayer) {
+              const layerBounds = this.imageLayer.getBounds();
+              if (layerBounds && layerBounds.isValid()) {
+                if (this.imageBlob!.type === "image/svg+xml") {
+                  this.map!.fitBounds(layerBounds, {
+                    padding: [20, 20],
+                  });
+                } else {
+                  this.map!.setView(layerBounds.getCenter(), this.zoomLevel);
+                }
+              }
+            }
           }, 50);
         });
-
-        // Fit the map to the actual tilted layer bounds
-        if (this.imageLayer) {
-          this.map.fitBounds(this.imageLayer.getBounds());
-        }
       } else {
-        // Standard fallback for non-rotated environments
         const bounds = this.calculateBounds(l);
         this.imageLayer = l
           .imageOverlay(imgBlobURL, bounds, { opacity: 1 })
           .addTo(this.map);
-        this.map.fitBounds(bounds);
+        if (bounds.isValid()) {
+          this.map.fitBounds(bounds);
+        }
       }
+    } else {
+      // No image blob, set default view
+      const center = this.getCenterCoordinates();
+      const zoom = this.zoomLevel || 18;
+      this.map.setView(center, zoom);
     }
   }
-
   /**
    * Initializes the CircleMarker and sets up the map click listener.
    */
@@ -379,17 +406,5 @@ export class MoveMarkerMapComponent
       return [itemPosition!.lat, itemPosition!.lng];
     }
     return [0, 0];
-  }
-
-  getCenterCoordinates(coordinates: any): [number, number] {
-    if (coordinates) {
-      const centerLat =
-        (coordinates.topLeftLat + coordinates.bottomRightLat) / 2;
-      const centerLng =
-        (coordinates.topLeftLng + coordinates.bottomRightLng) / 2;
-      return [centerLat, centerLng];
-    } else {
-      return [51.227, 6.773];
-    }
   }
 }
