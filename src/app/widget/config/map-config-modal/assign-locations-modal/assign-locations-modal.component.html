@@ -23,9 +23,29 @@
         </select>
       </div>
 
+      <div class="form-group">
+        <div class="input-group input-group-search">
+          <input
+            class="form-control"
+            type="search"
+            placeholder="Search devices…"
+            [(ngModel)]="searchString"
+          />
+          <span class="input-group-btn">
+            <button class="btn btn-clean" type="button" *ngIf="searchString" (click)="searchString = ''">
+              <i c8yIcon="times"></i>
+            </button>
+            <button class="btn btn-clean" type="button" *ngIf="!searchString">
+              <i c8yIcon="search"></i>
+            </button>
+          </span>
+        </div>
+      </div>
+
       <c8y-list-group class="separator-top">
         <ng-container *ngFor="let mo of managedObjectsForSelectedLevel">
           <c8y-li
+            *ngIf="!searchString || (mo['name'] && mo['name'].toLowerCase().indexOf(searchString.toLowerCase()) > -1)"
             [class]="{ highlighted: selectedItem === mo }"
             (click)="selectItem(mo); selectedItemIsSensor = true"
             class="nested-li"
