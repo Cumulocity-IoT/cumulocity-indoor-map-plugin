@@ -32,6 +32,7 @@ import { ImageRotateService } from "../../../../services/image-rotate.service";
 })
 export class AssignLocationModalComponent implements OnInit, OnDestroy {
   selectedLevel?: MapConfigurationLevel;
+  searchString: string = '';
   selectedItem?: {
     id: string;
     name?: string;
