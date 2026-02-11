@@ -5,7 +5,7 @@
   "version": "1.0.3",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve -u https://iot-strategy2022.eu-latest.cumulocity.com/ --shell cockpit-1021",
+    "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
